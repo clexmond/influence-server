@@ -3,6 +3,7 @@ require('dotenv').config({ silent: true });
 const { range, without } = require('lodash');
 const { eachLimit } = require('async');
 const logger = require('@common/lib/logger');
+const { Timer } = require('timer-node');
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
 const moment = require('moment');
@@ -144,6 +145,9 @@ const getLotsToBuild = async function () {
 };
 
 const main = async function ({ asteroids, lots, initEmpty } = {}) {
+  const timer = new Timer();
+  timer.start();
+
   if (asteroids) {
     for (const asteroid of asteroids) {
       logger.info(`building packed lot data for asteroid ${asteroid}`);
@@ -180,12 +184,19 @@ const main = async function ({ asteroids, lots, initEmpty } = {}) {
   const cache = {};
   for (const lot of lotsToBuild) {
     const { asteroidId, lotIndex } = Lot.toPosition(lot);
-    logger.info(`building packed lot data for ${index}/${lotsToBuild.length} `
+    logger.info(`Building packed lot data for ${index}/${lotsToBuild.length} `
       + `lotIndex: ${lotIndex} of asteroid: ${asteroidId}`);
-    cache[asteroidId] = await PackedLotDataService.update(lot, cache[asteroidId]);
+    cache[asteroidId] = await PackedLotDataService.update(lot, cache[asteroidId], false);
 
     index += 1;
   }
+  for (const [id, data] of Object.entries(cache)) {
+    logger.info(`Saving packed data for asteroid: ${id}`);
+    await PackedLotDataService._cacheSet({ id: id, label: Entity.IDS.ASTEROID }, data);
+  }
+
+  timer.stop();
+  logger.info(`Total duration: ${timer.format()}`);
 };
 
 const args = yargs(hideBin(process.argv))

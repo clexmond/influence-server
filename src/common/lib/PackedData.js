@@ -1,65 +1,26 @@
-const { chunk, isArray, isString, isNil } = require('lodash');
-
 class PackedData {
   /**
-   * @param {Object} packedData<Array<Number>>, packedWidth<Number>
+   * @param {Object} packedData<Array<Number>>, packedWidth<Number>, size<Number>
    * @returns {PackedData}
    * @throws {Error}
    * @constructor
    */
-  constructor({ packedData, packedWidth }) {
-    if (!packedWidth) throw new Error('Invalid packedWidth');
-    if (isNil(packedData) || !isArray(packedData)) throw new Error('Invalid packedData');
-
-    this.packedData = packedData;
-    this.packedWidth = packedWidth;
-  }
-
-  /**
-   * Returns the value at the given index
-   * @param {Number} index
-   * @returns {String}
-   */
-  get(index) {
-    const startIndex = Math.floor((index * this.packedWidth) / 32);
-    const endIndex = Math.ceil((index * this.packedWidth) / 32);
-    const startPos = (index * this.packedWidth) % 32;
-
-    const segments = this.unpack(startIndex, endIndex).join('').split('');
-    return segments.slice(startPos, startPos + this.packedWidth).join('');
-  }
-
-  /**
-   * Sets the value at the given index.
-   * @param {Number} index
-   * @param {String} value
-   * @returns {PackedData}
-   */
-  set(index, value) {
-    if (!isString(value)) throw new Error('Invalid value, must be a string');
-    if (value.length !== this.packedWidth) {
-      throw new Error(`Invalid value length. Expected ${this.packedWidth} but got ${value.length}.`);
+  constructor({ packedData, packedWidth, size } = {}) {
+    if (!Number.isInteger(packedWidth) || packedWidth <= 0 || packedWidth > 32) {
+      throw new Error("Invalid packedWidth");
     }
 
-    const startIndex = Math.floor((index * this.packedWidth) / 32);
-    const endIndex = Math.ceil((index * this.packedWidth) / 32);
-    const startPos = (index * this.packedWidth) % 32;
-
-    // Unpack and join only the block(s) needed
-    // 'segments' will be an array of '1' and '0' strings
-    const unpacked = this.unpack(startIndex, endIndex);
-    const segments = unpacked.join('').split('');
-
-    // Apply the value to the segments
-    segments.splice(startPos, this.packedWidth, ...value.split(''));
-
-    // Chunk the string into 32 bit segments.
-    // Each chunk is an array of '1' and '0' strings
-    const chunks = chunk(segments.join(''), 32);
-    for (let i = 0; i < chunks.length; i += 1) {
-      this.packedData[startIndex + i] = parseInt(chunks[i].join(''), 2);
+    if (Array.isArray(packedData)) {
+      this.packedData = packedData;
+      this.packedWidth = packedWidth;
+    } 
+    else if (Number.isInteger(size) && size > 0) {
+      this.packedData = new Array(Math.ceil(size * packedWidth / 32)).fill(0);
+      this.packedWidth = packedWidth;
+    } 
+    else {
+      throw new Error("Provide either packedData (array) or size (number)");
     }
-    return this;
   }
 
   /**
@@ -79,48 +40,83 @@ class PackedData {
   }
 
   /**
-   * Returns the unpacked data as an array of 32 bit binary strings
-   * Note: each value will be front padded with 0's for those lost when packing to an integer
-   * @returns {Array<String>}
+   * Returns the value at the given index
+   * @param {Number} index
+   * @returns {Number}
    */
-  unpack(start, end) {
-    if (isNil(start) || isNil(end)) return this.packedData.map((packedValue) => this._unpackValue(packedValue));
-    return this.packedData.slice(start, end + 1).map((packedValue) => this._unpackValue(packedValue));
+  get(index) {
+    const wordIndex = Math.floor(index * this.packedWidth / 32);
+    const startBit = index * this.packedWidth % 32;
+
+    const current = this.packedData[wordIndex];
+    const availableBits = 32 - startBit;
+
+    // case 1: our packedWidth fits in the rest of the word
+    if (this.packedWidth <= availableBits) {
+      const shift = availableBits - this.packedWidth;
+      const mask = this.packedWidth === 32 ? 0xFFFFFFFF : (1 << this.packedWidth) - 1;
+      return (current >>> shift) & mask;
+    }
+
+    // case 2: the value spans two words
+    else {
+      const next = this.packedData[wordIndex + 1];
+
+      const firstPartWidth = availableBits;
+      const secondPartWidth = this.packedWidth - firstPartWidth;
+
+      // lower bits from current word
+      const firstMask = (1 << firstPartWidth) - 1;
+      const firstPart = current & firstMask;
+
+      // upper bits from next word
+      const secondShift = 32 - secondPartWidth;
+      const secondMask = (1 << secondPartWidth) - 1;
+      const secondPart = (next >>> secondShift) & secondMask;
+
+      return (firstPart << secondPartWidth) | secondPart;
+    }
   }
 
   /**
-   * Returns the unpacked data as a single string
-   * @returns {String}
-   */
-  toString() {
-    return this.unpack().join('');
-  }
-
-  /**
-   * Unpacks a 32 bit integer into a 32 bit binary string
+   * Sets the value at the given index
+   * @param {Number} index
    * @param {Number} value
-   * @returns {String}
    */
-  _unpackValue(value) {
-    return value.toString(2).padStart(32, 0);
-  }
+  set(index, value) {
+    const wordIndex = Math.floor(index * this.packedWidth / 32);
+    const startBit = index * this.packedWidth % 32;
 
-  /**
-   * Creates a new PackedData instance from an array of numeric or binary strings values
-   * @param {String} array
-   * @param {Number} packedWidth
-   * @returns {PackedData}
-   */
-  static fromString(string, packedWidth) {
-    if (!packedWidth) throw new Error('Invalid packedWidth');
-    const packedData = chunk(string, 32).reduce((acc, _chunk) => {
-      // @note: we pad the end of the string with 0's to ensure the value is 32 bits
-      const value = parseInt(_chunk.join('').padEnd(32, 0), 2);
-      acc.push(value);
-      return acc;
-    }, []);
+    const current = this.packedData[wordIndex];
+    const availableBits = 32 - startBit;
 
-    return new PackedData({ packedData, packedWidth });
+    // case 1: our packedWidth fits in the rest of the word
+    if (this.packedWidth <= availableBits) {
+      const shift = availableBits - this.packedWidth;
+      const mask = this.packedWidth === 32 ? 0xFFFFFFFF : ((1 << this.packedWidth) - 1) << shift;
+      const shiftedValue = (value << shift) & mask;
+      this.packedData[wordIndex] = (current & (~mask) | shiftedValue);
+    }
+
+    // case 2: the value spans two words
+    else {
+      const next = this.packedData[wordIndex + 1];
+
+      const firstPartWidth = availableBits;
+      const secondPartWidth = this.packedWidth - firstPartWidth;
+
+      // lower bits into current word
+      const firstMask = (1 << firstPartWidth) - 1;
+      const shiftedFirstPart = (value >>> secondPartWidth) & firstMask;
+
+      // upper bits into next word
+      const secondPartShift = 32 - secondPartWidth;
+      const secondMask = ((1 << secondPartWidth) - 1) << secondPartShift;
+      const shiftedSecondPart = (value << secondPartShift) & secondMask;
+
+      this.packedData[wordIndex] = (current & (~firstMask) | shiftedFirstPart);
+      this.packedData[wordIndex + 1] = (next & (~secondMask) | shiftedSecondPart);
+    }
   }
 }
 
