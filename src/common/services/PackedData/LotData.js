@@ -16,6 +16,8 @@ const LotAttribute = {
   BUILDING_TYPE: { value: "buildingType", mask: 0b0000001111110000, shift: 4, compute: async (lotEntity) => { return await PackedLotDataService._buildingTypeOrStatus(lotEntity); } },
 }
 
+const LotSpecialType = { EMPTY: 0, CONTRUCTION_SITE: 62, LANDED_SHIP: 63}
+
 class PackedLotDataService {
   static PACKED_WIDTH = 10;  // align with client-side src/lib/api.js getAsteroidLotData()
 
@@ -318,7 +320,7 @@ class PackedLotDataService {
       // if has a current agreement but force is not true, skip
       if (!this.hasAgreement(lotData) || (this.hasAgreement(lotData) && clearAgreements)) {
         // update the lease status to 0 (= clear bits)
-        const updatedLotData = lotData & ~mask;
+        const updatedLotData = lotData & ~ LotAttribute.LEASE_STATUS.mask;
 
         // update the packed data object
         packedData.set(packedIndex, updatedLotData);
@@ -350,9 +352,9 @@ class PackedLotDataService {
 
     if (buildingLocationDoc?.virtuals?.building) {
       const { virtuals: { building } } = buildingLocationDoc.toJSON();
-      // special case, return 62 to indicate that the building is under construction
+      // special case, building is under construction
       const { PLANNED, UNDER_CONSTRUCTION } = Building.CONSTRUCTION_STATUSES;
-      if ([PLANNED, UNDER_CONSTRUCTION].includes(building.status)) return 62;
+      if ([PLANNED, UNDER_CONSTRUCTION].includes(building.status)) return LotSpecialType.CONTRUCTION_SITE;
 
       // return building type if building found on lot
       if (building.status && building.buildingType > 0 && Building.TYPES[building.buildingType]) {
@@ -360,17 +362,19 @@ class PackedLotDataService {
       }
     }
 
-    // special case, return 63 to represent a ship on the lot
-    if (shipLocationDoc) return 63;
+    // special case, landed ship
+    if (shipLocationDoc) return LotSpecialType.LANDED_SHIP;
 
     return 0;
   }
 
   static async _locationWithCrew(lotEntity) {
-    return mongoose.model('LocationComponent').exists({
+    const exists = await mongoose.model('LocationComponent').exists({
           'locations.uuid': lotEntity.uuid,
           'entity.label': Entity.IDS.CREW
         });
+
+    return exists ? 1 : 0;
   }
 
   /**
