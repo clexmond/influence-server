@@ -1,50 +1,104 @@
 const appConfig = require('config');
-const { delay, omitBy } = require('lodash');
+const { delay, groupBy, omitBy } = require('lodash');
 const { Timer } = require('timer-node');
 const logger = require('@common/lib/logger');
 const { ActivityService, StarknetEventService } = require('@common/services');
 const StarknetProvider = require('@common/lib/starknet/provider');
 const { StarknetBlockCache } = require('@common/lib/cache');
+const { PRE_CONFIRMED_BLOCK_NUMBER } = require('@common/lib/starknet/models/constants');
 const StarknetEventConfig = require('./config');
 
 class StarknetRetriever {
   constructor(props = {}) {
-    this.provider = new StarknetProvider(props);
+    const rpcEndpoint = appConfig.get('EventRetriever.starknet.rpcProvider');
+
+    this.provider = new StarknetProvider({
+      ...(rpcEndpoint ? { rpcEndpoint } : {}),
+      ...props
+    });
+  }
+
+  static getEventFingerprint(event) {
+    return [
+      event.event,
+      event.transactionHash,
+      event.logIndex,
+      event.blockHash
+    ].join(':');
+  }
+
+  getTrackedAddresses() {
+    return StarknetEventConfig.toArray().map(({ address }) => address);
+  }
+
+  hasBlockEventsChanged({ chainEvents = [], storedEvents = [] }) {
+    if (chainEvents.length !== storedEvents.length) return true;
+
+    const chainSet = new Set(chainEvents.map(StarknetRetriever.getEventFingerprint));
+    for (const fingerprint of storedEvents.map(StarknetRetriever.getEventFingerprint)) {
+      if (!chainSet.has(fingerprint)) return true;
+    }
+
+    return false;
   }
 
   // The intention of this method is to run on a delay behind the current runner N number of blocks behind
   // the current block number with the intent to catch any missed events that were not available per the provider
   // when first retrieved. This method should be run in a separate process to avoid blocking/overlapping with the
   // main runner process.
+  async auditOnce({ blockOffset = 10 } = {}) {
+    const logSlug = 'StarknetAuditRetriever::auditOnce';
+    const originBlock = Number(appConfig.get('Starknet.originBlock'));
+    const parsedBlockOffset = Number(blockOffset);
+    if (!Number.isFinite(parsedBlockOffset) || parsedBlockOffset < 0) {
+      throw new Error(`Invalid blockOffset: ${blockOffset}`);
+    }
+
+    // need to get the current head block in order to determine the starting block - offset
+    const headBlock = Number(await this.provider.getBlockNumber());
+    const startBlock = Math.max(originBlock, headBlock - parsedBlockOffset);
+    logger.info(`${logSlug}, headBlock -> startBlock: ${startBlock} -> ${headBlock}`);
+
+    const chainEvents = await this.pullAndFormatEvents({ fromBlock: startBlock, toBlock: headBlock });
+    const chainEventsByBlock = groupBy(chainEvents, 'blockNumber');
+    const storedEvents = await StarknetEventService.getEventsByBlockRange(startBlock, headBlock);
+    const storedEventsByBlock = groupBy(storedEvents, 'blockNumber');
+
+    let mismatchedBlocks = 0;
+    for (let blockNumber = startBlock; blockNumber <= headBlock; blockNumber += 1) {
+      const blockChainEvents = chainEventsByBlock[blockNumber] || [];
+      const blockStoredEvents = storedEventsByBlock[blockNumber] || [];
+      logger.info(
+        `${logSlug}, block [${blockNumber}], chain: ${blockChainEvents.length}, stored: ${blockStoredEvents.length}`
+      );
+
+      if (this.hasBlockEventsChanged({ chainEvents: blockChainEvents, storedEvents: blockStoredEvents })) {
+        mismatchedBlocks += 1;
+        logger.warn(`${logSlug}, mismatch detected on block [${blockNumber}], reconciling`);
+
+        if (blockStoredEvents.length > 0) {
+          await StarknetEventService.updateManyAsRemoved({ blockNumber });
+          await ActivityService.purgeByRemoved();
+        }
+
+        if (blockChainEvents.length > 0) {
+          await StarknetEventService.updateOrCreateMany(blockChainEvents);
+        }
+      }
+    }
+
+    return { headBlock, mismatchedBlocks, startBlock };
+  }
+
   async auditRunner({ runDelay, blockOffset = 10 } = {}) {
     const _runDelay = Number(runDelay || appConfig.EventRetriever.starknet?.auditRunDelay);
     if (!_runDelay) throw new Error('No run delay provided');
-    const logSlug = 'StarknetAuditRetriever::auditRunner';
     const keepRunning = true;
 
     while (keepRunning) {
       const timer = new Timer({ label: 'StarknetAuditRetriever-timer' }).start();
-      // need to get the current head block in order to determine the starting block - offset
-      const headBlock = await this.provider.getBlockNumber();
-      const startBlock = headBlock - blockOffset;
-      logger.info(`${logSlug}, headBlock -> starBlock: ${startBlock} -> ${headBlock}`);
-
-      for (let blockNumber = startBlock; blockNumber < headBlock; blockNumber += 1) {
-        const events = await this.pullAndFormatEvents({ blockNumber });
-
-        // save event(s) if not currently found in the database
-        logger.info(`${logSlug}, [${events.length}] event(s) on block ${blockNumber}`);
-        if (events.length > 0) {
-          const currentCount = await StarknetEventService.getEventCountByBlock(blockNumber);
-          if (currentCount < events.length) {
-            const diff = events.length - currentCount;
-            logger.info(`${logSlug}, ${diff} missing event(s) found on block ${blockNumber}.`
-              + ` Found: ${events.length} Current: ${currentCount}`);
-            logger.info(`${logSlug}, updating/creating [${events.length}] event(s) on block ${blockNumber}`);
-            await StarknetEventService.updateOrCreateMany(events);
-          }
-        }
-      }
+      const logSlug = 'StarknetAuditRetriever::auditRunner';
+      await this.auditOnce({ blockOffset });
 
       if (timer.ms() < _runDelay) {
         const delayMs = _runDelay - timer.ms();
@@ -54,7 +108,7 @@ class StarknetRetriever {
     }
   }
 
-  async runOnce({ blocks, fromBlock, toBlock, useCache = false, onlyMisingBlocks = false } = {}) {
+  async runOnce({ blocks, fromBlock, toBlock, onlyMisingBlocks = false } = {}) {
     if (blocks) {
       logger.info(`StarknetRetriever::runOnce, blocks: ${blocks}`);
       for (const block of blocks.map(Number)) {
@@ -65,12 +119,16 @@ class StarknetRetriever {
             continue; // eslint-disable-line no-continue
           }
         }
-        const _block = await this.provider.getBlock(block);
-        await this.processBlock(_block, { useCache });
+        await this.retrieveAndProcessRange({ fromBlock: block, toBlock: block });
       }
     } else {
-      logger.info(`StarknetRetriever::runOnce, fromBlock -> toBlock: ${fromBlock} -> ${toBlock}`);
-      for (let b = fromBlock; b <= toBlock; b += 1) {
+      const _fromBlock = Number(fromBlock || appConfig.get('Starknet.originBlock'));
+      const _toBlock = (toBlock === 'latest' || typeof toBlock === 'undefined' || toBlock === null)
+        ? await this.provider.getBlockNumber()
+        : Number(toBlock);
+
+      logger.info(`StarknetRetriever::runOnce, fromBlock -> toBlock: ${_fromBlock} -> ${_toBlock}`);
+      for (let b = _fromBlock; b <= _toBlock; b += 1) {
         if (onlyMisingBlocks) {
           const exists = await StarknetEventService.hasEventsForBlock(b);
           if (exists) {
@@ -78,10 +136,11 @@ class StarknetRetriever {
             continue; // eslint-disable-line no-continue
           }
         }
-        const block = await this.provider.getBlock(b);
-        await this.processBlock(block, { useCache });
+        await this.retrieveAndProcessRange({ fromBlock: b, toBlock: b });
       }
     }
+
+    await this.retrieveAndProcessRange({ fromBlock: 'pre_confirmed', toBlock: 'pre_confirmed' });
   }
 
   async runner({ runDelay } = {}) {
@@ -91,44 +150,34 @@ class StarknetRetriever {
     if (!_runDelay) throw new Error('No run delay provided');
 
     const keepRunning = true;
+    const originBlock = Number(appConfig.get('Starknet.originBlock'));
+    const reconciliationLookback = Number(appConfig.EventRetriever.starknet?.reconciliationLookback || 50);
 
     while (keepRunning) {
       const logSlug = 'StarknetRetriever::runner';
       const timer = new Timer({ label: 'StarknetRetriever-timer' }).start();
-      let fromBlock = 0;
+      let fromBlock = originBlock;
       let toBlock = 0;
-      let lastL1CachedBlock;
 
       try {
-        // Update L2 -> L1 blocks first
-        lastL1CachedBlock = await this.updateCachedL2BlocksToL1();
-        logger.info(`StarknetRetriever::runner, updated L2 -> L1 accepted until ${lastL1CachedBlock}`);
-
-        // Find the most recent cached block that is synced with the chain, fallback to lastL1CachedBlock
-        const l2CachedBlocks = await StarknetBlockCache.getl2AcceptedBlocks();
-        const cachedBlockNumbers = Object.keys(l2CachedBlocks).sort((a, b) => Number(a) - Number(b)).map(Number);
-        if (cachedBlockNumbers.length === 0) {
-          // if the cached l2 blocks are empty, try the cached l1 block or get latest accepted on l1 block from storage
-          fromBlock = lastL1CachedBlock || (await StarknetEventService.getLatestAcceptedOnL1())?.blockNumber;
-        } else {
-          fromBlock = await this.findLastSyncedBlock({ blockNumbers: cachedBlockNumbers, cachedBlocks: l2CachedBlocks })
-            || lastL1CachedBlock;
-        }
-
-        // Run most recent synced to the end of the current chain
+        const latestConfirmedEvent = await StarknetEventService.getLatestConfirmedEventByBlock();
+        const lastSyncedBlock = Number(await StarknetBlockCache.getl1AcceptedBlock() || originBlock);
+        const baseBlock = Math.max(
+          Number(latestConfirmedEvent?.blockNumber || originBlock),
+          lastSyncedBlock
+        );
+        fromBlock = Math.max(originBlock, baseBlock - reconciliationLookback);
         toBlock = await this.provider.getBlockNumber();
-        logger.info(`${logSlug}, latestSyncedBlock -> headBlock: ${fromBlock} -> ${toBlock}`);
-
-        for (let b = Number(fromBlock); b <= Number(toBlock); b += 1) {
-          await new Promise((resolve) => { delay(resolve, 1000); });
-          // An error thrown in retrieveAndProcess won't be caught and will break the loop
-          await this.retrieveAndProcessBlock(b);
+        logger.info(`${logSlug}, retrieve range [${fromBlock} -> ${toBlock}]`);
+        if (Number(fromBlock) <= Number(toBlock)) {
+          await this.retrieveAndProcessRange({ fromBlock, toBlock });
+          await StarknetBlockCache.setl1AcceptedBlock(toBlock);
         }
 
-        // retrieve and process the pending block
-        await this.retrieveAndProcessBlock('pending');
+        // Always pull PRE_CONFIRMED in each pass to keep recent events fresh.
+        await this.retrieveAndProcessRange({ fromBlock: 'pre_confirmed', toBlock: 'pre_confirmed' });
       } catch (error) {
-        logger.error(`${logSlug}, runner failed processing from block ${lastL1CachedBlock} to block ${toBlock}`);
+        logger.error(`${logSlug}, runner failed processing from block ${fromBlock} to block ${toBlock}`);
         logger.error(error);
       }
 
@@ -152,15 +201,20 @@ class StarknetRetriever {
   /**
    * @description Pulls events from the provider and formats them for storage
    *
-   * @param {BockInstance} block
+   * @param {Number|String} fromBlock
+   * @param {Number|String} toBlock
    * @returns {Array{Object}}
    */
-  async pullAndFormatEvents({ blockNumber }) {
+  async pullAndFormatEvents({ blockNumber, fromBlock, toBlock } = {}) {
+    const _fromBlock = (typeof blockNumber === 'undefined') ? fromBlock : blockNumber;
+    const _toBlock = (typeof blockNumber === 'undefined') ? (toBlock || _fromBlock) : blockNumber;
+    if (typeof _fromBlock === 'undefined') throw new Error('Missing required fromBlock value');
+
     const events = [];
     const rawEvents = await this.provider.getEvents({
-      addresses: StarknetEventConfig.toArray().map(({ address }) => address),
-      fromBlock: blockNumber,
-      toBlock: blockNumber
+      addresses: this.getTrackedAddresses(),
+      fromBlock: _fromBlock,
+      toBlock: _toBlock
     });
     rawEvents.forEach((event) => {
       const handler = StarknetEventConfig.getHandler(event);
@@ -173,6 +227,20 @@ class StarknetRetriever {
     });
 
     return events;
+  }
+
+  async retrieveAndProcessRange({ fromBlock, toBlock }) {
+    const logSlug = 'StarknetRetriever::retrieveAndProcessRange';
+    const events = await this.pullAndFormatEvents({ fromBlock, toBlock });
+
+    if (events.length === 0) {
+      logger.info(`${logSlug}, no events found for [${fromBlock} -> ${toBlock}]`);
+      return 0;
+    }
+
+    logger.info(`${logSlug}, [${events.length}] event(s) on [${fromBlock} -> ${toBlock}]`);
+    await StarknetEventService.updateOrCreateMany(events);
+    return events.length;
   }
 
   async findLastSyncedBlock({ blockNumbers, cachedBlocks }) {
@@ -256,7 +324,9 @@ class StarknetRetriever {
       const events = await this.pullAndFormatEvents(block);
 
       // save event(s)
-      const formattedBlockNumber = (block.blockNumber === Number.MAX_SAFE_INTEGER) ? 'PENDING' : block.blockNumber;
+      const formattedBlockNumber = (block.blockNumber === PRE_CONFIRMED_BLOCK_NUMBER)
+        ? 'PRE_CONFIRMED'
+        : block.blockNumber;
       logger.info(`${logSlug}, [${events.length}] event(s) on block ${formattedBlockNumber}`);
       if (events.length > 0) await StarknetEventService.updateOrCreateMany(events);
 
@@ -279,9 +349,9 @@ class StarknetRetriever {
       throw error;
     }
 
-    // if the PENDING block was requested but the returned block is ACCPETED_ON_L2,
+    // if the PRE_CONFIRMED block was requested but the returned block is ACCPETED_ON_L2,
     // we can return now. It will get picked up and processed on the next run
-    if (blockNumber === 'pending' && block.isAcceptedL2()) return;
+    if (blockNumber === 'pre_confirmed' && block.isAcceptedL2()) return;
 
     try {
       await this.processBlock(block);

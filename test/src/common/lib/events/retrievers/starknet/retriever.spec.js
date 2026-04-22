@@ -3,6 +3,7 @@ const sinon = require('sinon');
 const moment = require('moment');
 const appConfig = require('config');
 const BlockCache = require('@common/lib/cache/Starknet');
+const { ActivityService, StarknetEventService } = require('@common/services');
 const StarknetBlock = require('@common/lib/starknet/models/Block');
 const { StarknetRetriever } = require('@common/lib/events/retrievers/starknet/retriever');
 const StarknetEventConfig = require('../../../../../../../src/common/lib/events/retrievers/starknet/config');
@@ -68,7 +69,6 @@ describe('Starknet Event Retriever', function () {
   before(function () {
     configState = appConfig.util.cloneDeep(appConfig);
 
-    appConfig.Starknet.provider = 'FAKE_STARKNET_PROVIDER';
     appConfig.Starknet.rpcProvider = 'FAKE_STARKNET_RPC_PROVIDER';
     appConfig.Starknet.originBlock = 1;
 
@@ -220,6 +220,61 @@ describe('Starknet Event Retriever', function () {
       FakeHandler.ignore = undefined;
       results = await retriever.pullAndFormatEvents({ blockNumber: 1 });
       expect(results.length).to.eql(1);
+    });
+  });
+
+  describe('auditOnce', function () {
+    it('should reconcile a mismatched block', async function () {
+      const chainEvent = {
+        blockNumber: 12,
+        event: 'CrewStationedV1',
+        transactionHash: '0x1',
+        logIndex: 0,
+        blockHash: '0xabc'
+      };
+      const storedEvent = { ...chainEvent, blockHash: '0xdef' };
+
+      sandbox.stub(retriever.provider, 'getBlockNumber').resolves(15);
+      sandbox.stub(retriever, 'pullAndFormatEvents').resolves([chainEvent]);
+      sandbox.stub(StarknetEventService, 'getEventsByBlockRange').resolves([storedEvent]);
+      const removeStub = sandbox.stub(StarknetEventService, 'updateManyAsRemoved').resolves();
+      const purgeStub = sandbox.stub(ActivityService, 'purgeByRemoved').resolves();
+      const upsertStub = sandbox.stub(StarknetEventService, 'updateOrCreateMany').resolves();
+
+      const result = await retriever.auditOnce({ blockOffset: 10 });
+
+      expect(result.startBlock).to.eql(5);
+      expect(result.headBlock).to.eql(15);
+      expect(result.mismatchedBlocks).to.eql(1);
+      expect(removeStub.calledOnceWithExactly({ blockNumber: 12 })).to.eql(true);
+      expect(purgeStub.calledOnce).to.eql(true);
+      expect(upsertStub.calledOnceWithExactly([chainEvent])).to.eql(true);
+    });
+
+    it('should not reconcile matching blocks', async function () {
+      const chainEvent = {
+        blockNumber: 14,
+        event: 'CrewStationedV1',
+        transactionHash: '0x2',
+        logIndex: 1,
+        blockHash: '0x999'
+      };
+
+      sandbox.stub(retriever.provider, 'getBlockNumber').resolves(20);
+      sandbox.stub(retriever, 'pullAndFormatEvents').resolves([chainEvent]);
+      sandbox.stub(StarknetEventService, 'getEventsByBlockRange').resolves([chainEvent]);
+      const removeStub = sandbox.stub(StarknetEventService, 'updateManyAsRemoved').resolves();
+      const purgeStub = sandbox.stub(ActivityService, 'purgeByRemoved').resolves();
+      const upsertStub = sandbox.stub(StarknetEventService, 'updateOrCreateMany').resolves();
+
+      const result = await retriever.auditOnce({ blockOffset: 10 });
+
+      expect(result.startBlock).to.eql(10);
+      expect(result.headBlock).to.eql(20);
+      expect(result.mismatchedBlocks).to.eql(0);
+      expect(removeStub.called).to.eql(false);
+      expect(purgeStub.called).to.eql(false);
+      expect(upsertStub.called).to.eql(false);
     });
   });
 });

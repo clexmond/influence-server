@@ -1,5 +1,5 @@
 const appConfig = require('config');
-const { DefaultStarknetProvider, RpcProvider, SequencerProvider } = require('./providers');
+const { DefaultStarknetProvider, RpcProvider } = require('./providers');
 const logger = require('../logger');
 
 class StarknetProvider {
@@ -18,7 +18,6 @@ class StarknetProvider {
   }
 
   set providers(providers) {
-    const STARKNET_PROVIDER = appConfig.get('Starknet.provider');
     const STARKNET_RPC_PROVIDER = appConfig.get('Starknet.rpcProvider');
 
     // validate and set specified providers
@@ -30,9 +29,13 @@ class StarknetProvider {
         this._providers.push(provider);
       });
     } else {
+      const {
+        rpcEndpoint = STARKNET_RPC_PROVIDER,
+        ...providerProps
+      } = this.props;
+
       // set default providers is non provided
-      this._providers.push(new RpcProvider({ endpoint: STARKNET_RPC_PROVIDER, ...this.props }));
-      this._providers.push(new SequencerProvider({ endpoint: STARKNET_PROVIDER, ...this.props }));
+      this._providers.push(new RpcProvider({ endpoint: rpcEndpoint, ...providerProps }));
     }
   }
 

@@ -72,7 +72,9 @@
       "runDelay": 20000
     },
     "starknet": {
-      "runDelay": 20000
+      "runDelay": 20000,
+      "rpcProvider": null,
+      "reconciliationLookback": 50
     }
   },
   "EventProcessor": {

@@ -42,7 +42,9 @@
     "starknet": {
       "runDelay": "STARKNET_EVENT_RETRIEVER_RUN_DELAY",
       "auditRunDelay": "STARKNET_EVENT_RETRIEVER_AUDIT_RUN_DELAY",
-      "auditBlockOffset": "STARKNET_EVENT_RETRIEVER_AUDIT_BLOCK_OFFSET"
+      "auditBlockOffset": "STARKNET_EVENT_RETRIEVER_AUDIT_BLOCK_OFFSET",
+      "rpcProvider": "STARKNET_EVENT_RETRIEVER_RPC_PROVIDER",
+      "reconciliationLookback": "STARKNET_EVENT_RETRIEVER_RECONCILIATION_LOOKBACK"
     }
   },
   "EventProcessor": {
@@ -86,7 +88,6 @@
   },
   "Starknet": {
     "originBlock": "STARKNET_ORIGIN_BLOCK",
-    "provider": "STARKNET_PROVIDER",
     "rpcProvider": "STARKNET_RPC_PROVIDER",
     "faucetPrivateKey": "STARKNET_FAUCET_PRIVATE_KEY"
   },
