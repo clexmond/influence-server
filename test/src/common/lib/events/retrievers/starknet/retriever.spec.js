@@ -124,5 +124,65 @@ describe('Starknet Event Retriever', function () {
       expect(purgeStub.called).to.eql(false);
       expect(upsertStub.called).to.eql(false);
     });
+
+    it('should process large audit ranges in batches', async function () {
+      sandbox.stub(retriever.provider, 'getBlockNumber').resolves(1002);
+      const pullStub = sandbox.stub(retriever, 'pullAndFormatEvents').resolves([]);
+      const storedStub = sandbox.stub(StarknetEventService, 'getEventsByBlockRange').resolves([]);
+      const removeStub = sandbox.stub(StarknetEventService, 'updateManyAsRemoved').resolves();
+      const purgeStub = sandbox.stub(ActivityService, 'purgeByRemoved').resolves();
+      const upsertStub = sandbox.stub(StarknetEventService, 'updateOrCreateMany').resolves();
+
+      const result = await retriever.auditOnce({ blockOffset: 1001 });
+
+      expect(result.startBlock).to.eql(1);
+      expect(result.headBlock).to.eql(1002);
+      expect(result.mismatchedBlocks).to.eql(0);
+
+      expect(pullStub.callCount).to.eql(2);
+      expect(pullStub.getCall(0).calledWithExactly({ fromBlock: 1, toBlock: 1000 })).to.eql(true);
+      expect(pullStub.getCall(1).calledWithExactly({ fromBlock: 1001, toBlock: 1002 })).to.eql(true);
+
+      expect(storedStub.callCount).to.eql(2);
+      expect(storedStub.getCall(0).calledWithExactly(1, 1000)).to.eql(true);
+      expect(storedStub.getCall(1).calledWithExactly(1001, 1002)).to.eql(true);
+
+      expect(removeStub.called).to.eql(false);
+      expect(purgeStub.called).to.eql(false);
+      expect(upsertStub.called).to.eql(false);
+    });
+  });
+
+  describe('runOnce', function () {
+    it('should process from/to in range batches when onlyMisingBlocks is false', async function () {
+      const retrieveStub = sandbox.stub(retriever, 'retrieveAndProcessRange').resolves(0);
+      const hasEventsStub = sandbox.stub(StarknetEventService, 'hasEventsForBlock');
+
+      await retriever.runOnce({ fromBlock: 1, toBlock: 2500, onlyMisingBlocks: false });
+
+      expect(hasEventsStub.called).to.eql(false);
+      expect(retrieveStub.callCount).to.eql(4);
+      expect(retrieveStub.getCall(0).calledWithExactly({ fromBlock: 1, toBlock: 1000 })).to.eql(true);
+      expect(retrieveStub.getCall(1).calledWithExactly({ fromBlock: 1001, toBlock: 2000 })).to.eql(true);
+      expect(retrieveStub.getCall(2).calledWithExactly({ fromBlock: 2001, toBlock: 2500 })).to.eql(true);
+      expect(retrieveStub.getCall(3).calledWithExactly({ fromBlock: 'pre_confirmed', toBlock: 'pre_confirmed' }))
+        .to.eql(true);
+    });
+
+    it('should keep per-block checks when onlyMisingBlocks is true', async function () {
+      const retrieveStub = sandbox.stub(retriever, 'retrieveAndProcessRange').resolves(0);
+      const hasEventsStub = sandbox.stub(StarknetEventService, 'hasEventsForBlock');
+      hasEventsStub.withArgs(1).resolves(true);
+      hasEventsStub.withArgs(2).resolves(false);
+      hasEventsStub.withArgs(3).resolves(true);
+
+      await retriever.runOnce({ fromBlock: 1, toBlock: 3, onlyMisingBlocks: true });
+
+      expect(hasEventsStub.callCount).to.eql(3);
+      expect(retrieveStub.callCount).to.eql(2);
+      expect(retrieveStub.getCall(0).calledWithExactly({ fromBlock: 2, toBlock: 2 })).to.eql(true);
+      expect(retrieveStub.getCall(1).calledWithExactly({ fromBlock: 'pre_confirmed', toBlock: 'pre_confirmed' }))
+        .to.eql(true);
+    });
   });
 });

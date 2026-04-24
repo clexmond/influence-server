@@ -69,7 +69,7 @@
   "EventRetriever": {
     "runDelay": 20000,
     "ethereum": {
-      "runDelay": 20000
+      "runDelay": 60000
     },
     "starknet": {
       "runDelay": 20000,

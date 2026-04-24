@@ -7,6 +7,10 @@ const StarknetProvider = require('@common/lib/starknet/provider');
 const { StarknetBlockCache } = require('@common/lib/cache');
 const StarknetEventConfig = require('./config');
 
+const DEFAULT_BLOCK_BATCH_SIZE = 1000;
+const RUN_ONCE_BLOCK_BATCH_SIZE = DEFAULT_BLOCK_BATCH_SIZE;
+const AUDIT_BLOCK_BATCH_SIZE = DEFAULT_BLOCK_BATCH_SIZE;
+
 class StarknetRetriever {
   constructor(props = {}) {
     const rpcEndpoint = appConfig.get('EventRetriever.starknet.rpcProvider');
@@ -58,33 +62,40 @@ class StarknetRetriever {
     const startBlock = Math.max(originBlock, headBlock - parsedBlockOffset);
     logger.info(`${logSlug}, headBlock -> startBlock: ${startBlock} -> ${headBlock}`);
 
-    const chainEvents = await this.pullAndFormatEvents({ fromBlock: startBlock, toBlock: headBlock });
-    const chainEventsByBlock = groupBy(chainEvents, 'blockNumber');
-    const storedEvents = await StarknetEventService.getEventsByBlockRange(startBlock, headBlock);
-    const storedEventsByBlock = groupBy(storedEvents, 'blockNumber');
-
     let mismatchedBlocks = 0;
-    for (let blockNumber = startBlock; blockNumber <= headBlock; blockNumber += 1) {
-      const blockChainEvents = chainEventsByBlock[blockNumber] || [];
-      const blockStoredEvents = storedEventsByBlock[blockNumber] || [];
-      logger.info(
-        `${logSlug}, block [${blockNumber}], chain: ${blockChainEvents.length}, stored: ${blockStoredEvents.length}`
-      );
+    await this.forEachBlockRangeBatch({
+      fromBlock: startBlock,
+      toBlock: headBlock,
+      batchSize: AUDIT_BLOCK_BATCH_SIZE
+    }, async ({ fromBlock: batchFromBlock, toBlock: batchToBlock }) => {
+      logger.info(`${logSlug}, auditing batch [${batchFromBlock} -> ${batchToBlock}]`);
+      const chainEvents = await this.pullAndFormatEvents({ fromBlock: batchFromBlock, toBlock: batchToBlock });
+      const chainEventsByBlock = groupBy(chainEvents, 'blockNumber');
+      const storedEvents = await StarknetEventService.getEventsByBlockRange(batchFromBlock, batchToBlock);
+      const storedEventsByBlock = groupBy(storedEvents, 'blockNumber');
 
-      if (this.hasBlockEventsChanged({ chainEvents: blockChainEvents, storedEvents: blockStoredEvents })) {
-        mismatchedBlocks += 1;
-        logger.warn(`${logSlug}, mismatch detected on block [${blockNumber}], reconciling`);
+      for (let blockNumber = batchFromBlock; blockNumber <= batchToBlock; blockNumber += 1) {
+        const blockChainEvents = chainEventsByBlock[blockNumber] || [];
+        const blockStoredEvents = storedEventsByBlock[blockNumber] || [];
+        logger.info(
+          `${logSlug}, block [${blockNumber}], chain: ${blockChainEvents.length}, stored: ${blockStoredEvents.length}`
+        );
 
-        if (blockStoredEvents.length > 0) {
-          await StarknetEventService.updateManyAsRemoved({ blockNumber });
-          await ActivityService.purgeByRemoved();
-        }
+        if (this.hasBlockEventsChanged({ chainEvents: blockChainEvents, storedEvents: blockStoredEvents })) {
+          mismatchedBlocks += 1;
+          logger.warn(`${logSlug}, mismatch detected on block [${blockNumber}], reconciling`);
 
-        if (blockChainEvents.length > 0) {
-          await StarknetEventService.updateOrCreateMany(blockChainEvents);
+          if (blockStoredEvents.length > 0) {
+            await StarknetEventService.updateManyAsRemoved({ blockNumber });
+            await ActivityService.purgeByRemoved();
+          }
+
+          if (blockChainEvents.length > 0) {
+            await StarknetEventService.updateOrCreateMany(blockChainEvents);
+          }
         }
       }
-    }
+    });
 
     return { headBlock, mismatchedBlocks, startBlock };
   }
@@ -127,15 +138,23 @@ class StarknetRetriever {
         : Number(toBlock);
 
       logger.info(`StarknetRetriever::runOnce, fromBlock -> toBlock: ${_fromBlock} -> ${_toBlock}`);
-      for (let b = _fromBlock; b <= _toBlock; b += 1) {
-        if (onlyMisingBlocks) {
+      if (onlyMisingBlocks) {
+        for (let b = _fromBlock; b <= _toBlock; b += 1) {
           const exists = await StarknetEventService.hasEventsForBlock(b);
           if (exists) {
             logger.info(`StarknetRetriever::runOnce, events found on [${b}], skipping`);
             continue; // eslint-disable-line no-continue
           }
+          await this.retrieveAndProcessRange({ fromBlock: b, toBlock: b });
         }
-        await this.retrieveAndProcessRange({ fromBlock: b, toBlock: b });
+      } else {
+        await this.forEachBlockRangeBatch({
+          fromBlock: _fromBlock,
+          toBlock: _toBlock,
+          batchSize: RUN_ONCE_BLOCK_BATCH_SIZE
+        }, ({ fromBlock: batchFromBlock, toBlock: batchToBlock }) => (
+          this.retrieveAndProcessRange({ fromBlock: batchFromBlock, toBlock: batchToBlock })
+        ));
       }
     }
 
@@ -191,6 +210,17 @@ class StarknetRetriever {
   }
 
   // Internal
+
+  async forEachBlockRangeBatch({ fromBlock, toBlock, batchSize = DEFAULT_BLOCK_BATCH_SIZE }, fn) {
+    if (!fn || typeof fn !== 'function') throw new Error('fn callback is required');
+    if (!Number.isFinite(fromBlock) || !Number.isFinite(toBlock)) throw new Error('fromBlock/toBlock must be numbers');
+    if (!Number.isFinite(batchSize) || batchSize < 1) throw new Error('batchSize must be a positive number');
+
+    for (let b = fromBlock; b <= toBlock; b += batchSize) {
+      const batchToBlock = Math.min(toBlock, b + batchSize - 1);
+      await fn({ fromBlock: b, toBlock: batchToBlock });
+    }
+  }
 
   /**
    * @description Pulls events from the provider and formats them for storage
