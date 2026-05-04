@@ -125,18 +125,21 @@ describe('Starknet Event Retriever', function () {
   });
 
   describe('ensureBootstrapCheckpoint', function () {
-    it('should bootstrap the last retrieved checkpoint from stored starknet events', async function () {
-      sandbox.stub(StarknetBlockCache, 'getLastRetrievedBlock').resolves(undefined);
-      sandbox.stub(StarknetBlockCache, 'getLastAuditedFinalizedBlock').resolves(undefined);
-      sandbox.stub(retriever.provider, 'getBlockNumber').resolves(20);
-      sandbox.stub(StarknetEventService, 'getLatestEventByBlock').resolves({ blockNumber: 654 });
-      const setStub = sandbox.stub(StarknetBlockCache, 'setLastRetrievedBlock').resolves();
+    it(
+      'should bootstrap the last retrieved checkpoint from stored starknet events when head lookup is unavailable',
+      async function () {
+        sandbox.stub(StarknetBlockCache, 'getLastRetrievedBlock').resolves(undefined);
+        sandbox.stub(StarknetBlockCache, 'getLastAuditedFinalizedBlock').resolves(undefined);
+        sandbox.stub(retriever.provider, 'getBlockNumber').rejects(new Error('rpc unavailable'));
+        sandbox.stub(StarknetEventService, 'getLatestEventByBlock').resolves({ blockNumber: 654 });
+        const setStub = sandbox.stub(StarknetBlockCache, 'setLastRetrievedBlock').resolves();
 
-      const checkpoint = await retriever.ensureBootstrapCheckpoint();
+        const checkpoint = await retriever.ensureBootstrapCheckpoint();
 
-      expect(checkpoint).to.eql(654);
-      expect(setStub.calledOnceWithExactly(654)).to.eql(true);
-    });
+        expect(checkpoint).to.eql(654);
+        expect(setStub.calledOnceWithExactly(654)).to.eql(true);
+      }
+    );
 
     it(
       'should prefer the audited finalized checkpoint when bootstrapping after retriever checkpoint loss',
@@ -166,5 +169,21 @@ describe('Starknet Event Retriever', function () {
       expect(checkpoint).to.eql(1000);
       expect(setStub.calledOnceWithExactly(1000)).to.eql(true);
     });
+
+    it(
+      'should prefer the bounded head lookback over a stale latest event when no audited checkpoint exists',
+      async function () {
+        sandbox.stub(StarknetBlockCache, 'getLastRetrievedBlock').resolves(undefined);
+        sandbox.stub(StarknetBlockCache, 'getLastAuditedFinalizedBlock').resolves(undefined);
+        sandbox.stub(retriever.provider, 'getBlockNumber').resolves(26000);
+        sandbox.stub(StarknetEventService, 'getLatestEventByBlock').resolves({ blockNumber: 654 });
+        const setStub = sandbox.stub(StarknetBlockCache, 'setLastRetrievedBlock').resolves();
+
+        const checkpoint = await retriever.ensureBootstrapCheckpoint();
+
+        expect(checkpoint).to.eql(1000);
+        expect(setStub.calledOnceWithExactly(1000)).to.eql(true);
+      }
+    );
   });
 });

@@ -31,12 +31,17 @@ class EthereumRetriever {
       logger.warn(`EthereumRetriever::getBootstrapLastRetrievedBlock, unable to load head block: ${error.message}`);
     }
 
-    const bootstrapBlock = [lastAuditedFinalizedBlock, recentHeadBlock, latestEventBlock]
-      .filter(Number.isFinite)
-      .reduce((maxValue, value) => Math.max(maxValue, value), originBlock - 1);
+    const orderedCandidates = [
+      ['lastAuditedFinalizedBlock', lastAuditedFinalizedBlock],
+      ['recentHeadBlock', recentHeadBlock],
+      ['latestEventBlock', latestEventBlock]
+    ];
+    const [source, bootstrapBlock = originBlock - 1] = orderedCandidates
+      .find(([, value]) => Number.isFinite(value)) || [];
 
     return {
       bootstrapBlock,
+      source,
       candidates: {
         lastAuditedFinalizedBlock,
         recentHeadBlock,
@@ -50,14 +55,24 @@ class EthereumRetriever {
     const parsedValue = Number(existingValue);
     if (Number.isFinite(parsedValue)) return parsedValue;
 
-    const { bootstrapBlock, candidates } = await this.getBootstrapLastRetrievedBlock();
+    const { bootstrapBlock, source, candidates } = await this.getBootstrapLastRetrievedBlock();
     await EthereumBlockCache.setLastRetrievedBlock(bootstrapBlock);
     logger.info(
       `EthereumRetriever::ensureBootstrapCheckpoint, bootstrapped to block ${bootstrapBlock}`
+      + ` via ${source || 'origin'}`
       + ` (audited=${candidates.lastAuditedFinalizedBlock}, recentHead=${candidates.recentHeadBlock},`
       + ` latestEvent=${candidates.latestEventBlock})`
     );
     return bootstrapBlock;
+  }
+
+  async cacheCurrentBlockNumber(blockNumber) {
+    if (!Number.isFinite(blockNumber)) return;
+
+    const cachedBlockNumber = await EthereumBlockCache.getCurrentBlockNumber();
+    if (blockNumber !== Number(cachedBlockNumber)) {
+      await EthereumBlockCache.setCurrentBlockNumber(blockNumber);
+    }
   }
 
   async forEachBlockRangeBatch({ fromBlock, toBlock, batchSize = DEFAULT_BLOCK_BATCH_SIZE }, fn) {
@@ -120,10 +135,12 @@ class EthereumRetriever {
         if (events.length > 0) await this.saveEvents(events);
       }
     } else {
+      const usesLatestHead = toBlock === 'latest' || typeof toBlock === 'undefined' || toBlock === null;
       const _fromBlock = Number(fromBlock || ETH_ORIGIN_BLOCK);
-      const _toBlock = (toBlock === 'latest' || typeof toBlock === 'undefined' || toBlock === null)
+      const _toBlock = usesLatestHead
         ? Number(await web3.eth.getBlockNumber())
         : Number(toBlock);
+      if (usesLatestHead) await this.cacheCurrentBlockNumber(_toBlock);
       if (_toBlock < _fromBlock) return null;
       const batchSize = Number(appConfig.EventRetriever.ethereum?.blockBatchSize || DEFAULT_BLOCK_BATCH_SIZE);
       await this.forEachBlockRangeBatch({ fromBlock: _fromBlock, toBlock: _toBlock, batchSize }, async (range) => {
@@ -155,6 +172,7 @@ class EthereumRetriever {
       try {
         latestBlockNumber = Number(await web3.eth.getBlockNumber());
         if (!latestBlockNumber) throw new Error('getBlockNumber returned empty value');
+        await this.cacheCurrentBlockNumber(latestBlockNumber);
         const batchSize = Number(appConfig.EventRetriever.ethereum?.blockBatchSize || DEFAULT_BLOCK_BATCH_SIZE);
         const lastRetrieved = await this.ensureBootstrapCheckpoint();
         fromBlock = Math.max(Number(ETH_ORIGIN_BLOCK), lastRetrieved + 1);

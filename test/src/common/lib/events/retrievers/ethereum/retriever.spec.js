@@ -70,18 +70,21 @@ describe('Ethereum Event Retriever', function () {
     expect(matchesStub.called).to.eql(false);
   });
 
-  it('should bootstrap the last retrieved checkpoint from stored ethereum events', async function () {
-    sandbox.stub(EthereumBlockCache, 'getLastRetrievedBlock').resolves(undefined);
-    sandbox.stub(EthereumBlockCache, 'getLastAuditedFinalizedBlock').resolves(undefined);
-    sandbox.stub(web3.eth, 'getBlockNumber').resolves(20);
-    sandbox.stub(EthereumEventService, 'getLatestEventByBlock').resolves({ blockNumber: 321 });
-    const setStub = sandbox.stub(EthereumBlockCache, 'setLastRetrievedBlock').resolves();
+  it(
+    'should bootstrap the last retrieved checkpoint from stored ethereum events when head lookup is unavailable',
+    async function () {
+      sandbox.stub(EthereumBlockCache, 'getLastRetrievedBlock').resolves(undefined);
+      sandbox.stub(EthereumBlockCache, 'getLastAuditedFinalizedBlock').resolves(undefined);
+      sandbox.stub(web3.eth, 'getBlockNumber').rejects(new Error('rpc unavailable'));
+      sandbox.stub(EthereumEventService, 'getLatestEventByBlock').resolves({ blockNumber: 321 });
+      const setStub = sandbox.stub(EthereumBlockCache, 'setLastRetrievedBlock').resolves();
 
-    const checkpoint = await retriever.ensureBootstrapCheckpoint();
+      const checkpoint = await retriever.ensureBootstrapCheckpoint();
 
-    expect(checkpoint).to.eql(321);
-    expect(setStub.calledOnceWithExactly(321)).to.eql(true);
-  });
+      expect(checkpoint).to.eql(321);
+      expect(setStub.calledOnceWithExactly(321)).to.eql(true);
+    }
+  );
 
   it(
     'should prefer the audited finalized checkpoint when bootstrapping after retriever checkpoint loss',
@@ -110,5 +113,39 @@ describe('Ethereum Event Retriever', function () {
 
     expect(checkpoint).to.eql(2050);
     expect(setStub.calledOnceWithExactly(2050)).to.eql(true);
+  });
+
+  it(
+    'should prefer the bounded head lookback over a stale latest event when no audited checkpoint exists',
+    async function () {
+      sandbox.stub(EthereumBlockCache, 'getLastRetrievedBlock').resolves(undefined);
+      sandbox.stub(EthereumBlockCache, 'getLastAuditedFinalizedBlock').resolves(undefined);
+      sandbox.stub(web3.eth, 'getBlockNumber').resolves(12050);
+      sandbox.stub(EthereumEventService, 'getLatestEventByBlock').resolves({ blockNumber: 321 });
+      const setStub = sandbox.stub(EthereumBlockCache, 'setLastRetrievedBlock').resolves();
+
+      const checkpoint = await retriever.ensureBootstrapCheckpoint();
+
+      expect(checkpoint).to.eql(2050);
+      expect(setStub.calledOnceWithExactly(2050)).to.eql(true);
+    }
+  );
+
+  it('should update the cached ethereum head block number when it changes', async function () {
+    sandbox.stub(EthereumBlockCache, 'getCurrentBlockNumber').resolves(122);
+    const setStub = sandbox.stub(EthereumBlockCache, 'setCurrentBlockNumber').resolves();
+
+    await retriever.cacheCurrentBlockNumber(123);
+
+    expect(setStub.calledOnceWithExactly(123)).to.eql(true);
+  });
+
+  it('should not update the cached ethereum head block number when it is unchanged', async function () {
+    sandbox.stub(EthereumBlockCache, 'getCurrentBlockNumber').resolves(123);
+    const setStub = sandbox.stub(EthereumBlockCache, 'setCurrentBlockNumber').resolves();
+
+    await retriever.cacheCurrentBlockNumber(123);
+
+    expect(setStub.called).to.eql(false);
   });
 });

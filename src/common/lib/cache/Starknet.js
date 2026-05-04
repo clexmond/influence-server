@@ -33,6 +33,10 @@ class StarknetBlockCache extends BaseMongoCache {
   static setLastAuditedFinalizedBlock(blockNumber) {
     return this.cacheInstance.set('LAST_AUDITED_FINALIZED_STARKNET_BLOCK', blockNumber);
   }
+
+  static getLegacyAcceptedL1Block() {
+    return this.cacheInstance.get('ACCEPTED_L1_BLOCK');
+  }
 }
 
 module.exports = StarknetBlockCache;

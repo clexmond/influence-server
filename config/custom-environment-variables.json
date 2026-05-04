@@ -57,7 +57,8 @@
     },
     "starknet": {
       "runDelay": "STARKNET_EVENT_AUDITOR_RUN_DELAY",
-      "blockBatchSize": "STARKNET_EVENT_AUDITOR_BLOCK_BATCH_SIZE"
+      "blockBatchSize": "STARKNET_EVENT_AUDITOR_BLOCK_BATCH_SIZE",
+      "bootstrapLookbackBlocks": "STARKNET_EVENT_AUDITOR_BOOTSTRAP_LOOKBACK_BLOCKS"
     }
   },
   "EventProcessor": {

@@ -44,12 +44,17 @@ class StarknetRetriever {
       logger.warn(`StarknetRetriever::getBootstrapLastRetrievedBlock, unable to load head block: ${error.message}`);
     }
 
-    const bootstrapBlock = [lastAuditedFinalizedBlock, recentHeadBlock, latestEventBlock]
-      .filter(Number.isFinite)
-      .reduce((maxValue, value) => Math.max(maxValue, value), originBlock - 1);
+    const orderedCandidates = [
+      ['lastAuditedFinalizedBlock', lastAuditedFinalizedBlock],
+      ['recentHeadBlock', recentHeadBlock],
+      ['latestEventBlock', latestEventBlock]
+    ];
+    const [source, bootstrapBlock = originBlock - 1] = orderedCandidates
+      .find(([, value]) => Number.isFinite(value)) || [];
 
     return {
       bootstrapBlock,
+      source,
       candidates: {
         lastAuditedFinalizedBlock,
         recentHeadBlock,
@@ -63,10 +68,11 @@ class StarknetRetriever {
     const parsedValue = Number(existingValue);
     if (Number.isFinite(parsedValue)) return parsedValue;
 
-    const { bootstrapBlock, candidates } = await this.getBootstrapLastRetrievedBlock();
+    const { bootstrapBlock, source, candidates } = await this.getBootstrapLastRetrievedBlock();
     await StarknetBlockCache.setLastRetrievedBlock(bootstrapBlock);
     logger.info(
       `StarknetRetriever::ensureBootstrapCheckpoint, bootstrapped to block ${bootstrapBlock}`
+      + ` via ${source || 'origin'}`
       + ` (audited=${candidates.lastAuditedFinalizedBlock}, recentHead=${candidates.recentHeadBlock},`
       + ` latestEvent=${candidates.latestEventBlock})`
     );

@@ -5,6 +5,8 @@ const { ActivityService, StarknetEventService } = require('@common/services');
 const { StarknetRetriever } = require('../retrievers/starknet/retriever');
 const BaseAuditor = require('./Base');
 
+const DEFAULT_BOOTSTRAP_LOOKBACK_BLOCKS = 5000;
+
 class StarknetAuditor extends BaseAuditor {
   constructor(props = {}) {
     super({
@@ -13,14 +15,52 @@ class StarknetAuditor extends BaseAuditor {
     });
 
     this.batchSize = Number(props.batchSize || appConfig.EventAuditor?.starknet?.blockBatchSize || 1000);
+    this.bootstrapLookbackBlocks = Number(
+      props.bootstrapLookbackBlocks
+      || appConfig.EventAuditor?.starknet?.bootstrapLookbackBlocks
+      || DEFAULT_BOOTSTRAP_LOOKBACK_BLOCKS
+    );
     this.originBlock = Number(appConfig.get('Starknet.originBlock'));
     this.retriever = props.retriever || new StarknetRetriever();
   }
 
-  async getTrustedCheckpoint() {
+  async getBootstrapCheckpoint(finalizedBlock) {
     const existingValue = await StarknetBlockCache.getLastAuditedFinalizedBlock();
     const parsedValue = Number(existingValue);
-    return Number.isFinite(parsedValue) ? parsedValue : null;
+    if (Number.isFinite(parsedValue)) {
+      return {
+        checkpoint: parsedValue,
+        bootstrapped: false
+      };
+    }
+
+    const legacyAcceptedL1Block = Number(await StarknetBlockCache.getLegacyAcceptedL1Block());
+    const lastRetrievedBlock = Number(await StarknetBlockCache.getLastRetrievedBlock());
+    const latestStoredEvent = await StarknetEventService.getLatestEventByBlock();
+    const latestStoredBlock = Number(latestStoredEvent?.blockNumber);
+    const orderedHints = [
+      ['legacyAcceptedL1Block', legacyAcceptedL1Block],
+      ['lastRetrievedBlock', lastRetrievedBlock],
+      ['latestStoredBlock', latestStoredBlock],
+      ['finalizedBlock', finalizedBlock]
+    ];
+    const [source, hintBlock = finalizedBlock] = orderedHints.find(([, value]) => Number.isFinite(value)) || [];
+    const boundedHint = Math.min(finalizedBlock, hintBlock);
+    const checkpoint = Math.max(this.originBlock - 1, boundedHint - this.bootstrapLookbackBlocks);
+
+    await StarknetBlockCache.setLastAuditedFinalizedBlock(checkpoint);
+    logger.info(
+      `StarknetAuditor::getBootstrapCheckpoint, bootstrapped to block ${checkpoint}`
+      + ` via ${source || 'origin'}`
+      + ` (legacyAccepted=${legacyAcceptedL1Block}, lastRetrieved=${lastRetrievedBlock},`
+      + ` latestStored=${latestStoredBlock}, finalized=${finalizedBlock},`
+      + ` lookback=${this.bootstrapLookbackBlocks})`
+    );
+
+    return {
+      checkpoint,
+      bootstrapped: true
+    };
   }
 
   async getFinalizedFrontier() {
@@ -61,18 +101,16 @@ class StarknetAuditor extends BaseAuditor {
 
   async auditOnce() {
     const logSlug = 'StarknetAuditor::auditOnce';
-    const lastAudited = await this.getTrustedCheckpoint();
     const headBlock = Number(await this.retriever.provider.getBlockNumber());
     const finalizedBlock = await this.getFinalizedFrontier();
-    const startBlock = Number.isFinite(lastAudited)
-      ? Math.max(this.originBlock, lastAudited + 1)
-      : this.originBlock;
+    const { checkpoint: lastAudited, bootstrapped } = await this.getBootstrapCheckpoint(finalizedBlock);
+    const startBlock = Math.max(this.originBlock, lastAudited + 1);
     logger.info(
       `${logSlug}, finalized frontier head=${headBlock}, l1Accepted=${finalizedBlock}, start=${startBlock}`
     );
 
     if (startBlock > finalizedBlock) {
-      if (!Number.isFinite(lastAudited)) {
+      if (bootstrapped && lastAudited !== finalizedBlock) {
         await StarknetBlockCache.setLastAuditedFinalizedBlock(finalizedBlock);
         logger.info(`StarknetAuditor::auditOnce, validated bootstrap checkpoint at block ${finalizedBlock}`);
       }

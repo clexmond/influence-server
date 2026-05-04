@@ -21,19 +21,58 @@ describe('StarknetAuditor', function () {
     };
     const auditor = new StarknetAuditor({ retriever, batchSize: 200 });
 
-    sandbox.stub(StarknetBlockCache, 'getLastAuditedFinalizedBlock').resolves(undefined);
+    sandbox.stub(StarknetBlockCache, 'getLastAuditedFinalizedBlock').resolves(100);
+    sandbox.stub(StarknetBlockCache, 'getLegacyAcceptedL1Block').resolves(undefined);
+    sandbox.stub(StarknetBlockCache, 'getLastRetrievedBlock').resolves(undefined);
     const setAuditedStub = sandbox.stub(StarknetBlockCache, 'setLastAuditedFinalizedBlock').resolves();
     sandbox.stub(StarknetEventService, 'getEventsByBlockRange').resolves([]);
+    sandbox.stub(StarknetEventService, 'getLatestEventByBlock').resolves(null);
 
     const result = await auditor.auditOnce();
 
     expect(result.finalizedBlock).to.eql(110);
-    expect(auditedRange).to.deep.equal({ fromBlock: 1, toBlock: 110, batchSize: 200 });
+    expect(auditedRange).to.deep.equal({ fromBlock: 101, toBlock: 110, batchSize: 200 });
     expect(retriever.provider.getBlock.calledOnceWithExactly('l1_accepted')).to.eql(true);
     expect(setAuditedStub.calledOnceWithExactly(110)).to.eql(true);
 
     sandbox.restore();
   });
+
+  it(
+    'should bootstrap the finalized checkpoint from prior Starknet progress and audit only a bounded tail',
+    async function () {
+      const sandbox = sinon.createSandbox();
+      let auditedRange;
+      const retriever = {
+        forEachBlockRangeBatch: async (range, fn) => {
+          auditedRange = range;
+          await fn({ fromBlock: range.fromBlock, toBlock: range.toBlock });
+        },
+        pullAndFormatEvents: sandbox.stub().resolves([]),
+        provider: {
+          getBlockNumber: sandbox.stub().resolves(150),
+          getBlock: sandbox.stub().withArgs('l1_accepted').resolves({ blockNumber: 110 })
+        }
+      };
+      const auditor = new StarknetAuditor({ retriever, batchSize: 200, bootstrapLookbackBlocks: 5 });
+
+      sandbox.stub(StarknetBlockCache, 'getLastAuditedFinalizedBlock').resolves(undefined);
+      sandbox.stub(StarknetBlockCache, 'getLegacyAcceptedL1Block').resolves(undefined);
+      sandbox.stub(StarknetBlockCache, 'getLastRetrievedBlock').resolves(107);
+      const setAuditedStub = sandbox.stub(StarknetBlockCache, 'setLastAuditedFinalizedBlock').resolves();
+      sandbox.stub(StarknetEventService, 'getLatestEventByBlock').resolves({ blockNumber: 95 });
+      sandbox.stub(StarknetEventService, 'getEventsByBlockRange').resolves([]);
+
+      const result = await auditor.auditOnce();
+
+      expect(result.finalizedBlock).to.eql(110);
+      expect(auditedRange).to.deep.equal({ fromBlock: 103, toBlock: 110, batchSize: 200 });
+      expect(setAuditedStub.getCall(0).calledWithExactly(102)).to.eql(true);
+      expect(setAuditedStub.getCall(setAuditedStub.callCount - 1).calledWithExactly(110)).to.eql(true);
+
+      sandbox.restore();
+    }
+  );
 
   it('should purge activities only for the stored transaction hashes in repaired blocks', async function () {
     const sandbox = sinon.createSandbox();
@@ -96,8 +135,11 @@ describe('StarknetAuditor', function () {
     const auditor = new StarknetAuditor({ retriever, batchSize: 100 });
 
     sandbox.stub(StarknetBlockCache, 'getLastAuditedFinalizedBlock').resolves(120);
+    sandbox.stub(StarknetBlockCache, 'getLegacyAcceptedL1Block').resolves(undefined);
+    sandbox.stub(StarknetBlockCache, 'getLastRetrievedBlock').resolves(undefined);
     sandbox.stub(StarknetBlockCache, 'setLastAuditedFinalizedBlock').resolves();
     sandbox.stub(StarknetEventService, 'getEventsByBlockRange').resolves([]);
+    sandbox.stub(StarknetEventService, 'getLatestEventByBlock').resolves(null);
 
     const result = await auditor.auditOnce();
 
@@ -131,8 +173,11 @@ describe('StarknetAuditor', function () {
     const auditor = new StarknetAuditor({ retriever, batchSize: 100 });
 
     sandbox.stub(StarknetBlockCache, 'getLastAuditedFinalizedBlock').resolves(29);
+    sandbox.stub(StarknetBlockCache, 'getLegacyAcceptedL1Block').resolves(undefined);
+    sandbox.stub(StarknetBlockCache, 'getLastRetrievedBlock').resolves(undefined);
     const setAuditedStub = sandbox.stub(StarknetBlockCache, 'setLastAuditedFinalizedBlock').resolves();
     sandbox.stub(StarknetEventService, 'getEventsByBlockRange').resolves([storedEvent]);
+    sandbox.stub(StarknetEventService, 'getLatestEventByBlock').resolves(null);
     const removeStub = sandbox.stub(StarknetEventService, 'updateManyAsRemoved').resolves();
     const upsertStub = sandbox.stub(StarknetEventService, 'updateOrCreateMany').resolves();
     const resetStub = sandbox.stub(StarknetEventService, 'resetLastProcessedFromBlock').resolves();

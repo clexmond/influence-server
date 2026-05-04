@@ -62,6 +62,13 @@ describe('StarknetBlockCache', function () {
     });
   });
 
+  describe('getLegacyAcceptedL1Block', function () {
+    it('should get the legacy accepted on l1 starknet block number', async function () {
+      await BaseMongoCache.cacheInstance.set('ACCEPTED_L1_BLOCK', 77);
+      expect(await StarknetBlockCache.getLegacyAcceptedL1Block()).to.equal(77);
+    });
+  });
+
   describe('reset', function () {
     it('should delete only the optimistic/audited starknet checkpoint keys', async function () {
       await BaseMongoCache.cacheInstance.set('LAST_RETRIEVED_STARKNET_BLOCK', 11);
