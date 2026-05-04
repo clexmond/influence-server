@@ -223,7 +223,7 @@ class StarknetRetriever {
 
       Object.values(unhandledGroups).forEach(({ address, count, selector }) => {
         logger.debug(
-          `StarknetRetriever::pullAndFormatEvents, unhandled selector summary`
+          'StarknetRetriever::pullAndFormatEvents, unhandled selector summary'
           + ` address=${address} selector=${selector} count=${count}`
         );
       });

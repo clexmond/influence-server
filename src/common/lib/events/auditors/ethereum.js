@@ -9,8 +9,7 @@ const BaseAuditor = require('./Base');
 class EthereumAuditor extends BaseAuditor {
   constructor(props = {}) {
     super({
-      name: 'EthereumAuditor',
-      runDelay: props.runDelay || appConfig.EventAuditor?.ethereum?.runDelay
+      name: 'EthereumAuditor'
     });
 
     this.batchSize = Number(props.batchSize || appConfig.EventAuditor?.ethereum?.blockBatchSize || 1000);

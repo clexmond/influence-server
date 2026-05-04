@@ -10,8 +10,7 @@ const DEFAULT_BOOTSTRAP_LOOKBACK_BLOCKS = 5000;
 class StarknetAuditor extends BaseAuditor {
   constructor(props = {}) {
     super({
-      name: 'StarknetAuditor',
-      runDelay: props.runDelay || appConfig.EventAuditor?.starknet?.runDelay
+      name: 'StarknetAuditor'
     });
 
     this.batchSize = Number(props.batchSize || appConfig.EventAuditor?.starknet?.blockBatchSize || 1000);

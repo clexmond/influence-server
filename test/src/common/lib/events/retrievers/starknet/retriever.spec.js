@@ -89,11 +89,10 @@ describe('Starknet Event Retriever', function () {
       sandbox.stub(StarknetEventConfig, 'getHandler').returns(null);
 
       const results = await retriever.pullAndFormatEvents({ fromBlock: 10, toBlock: 20 });
+      const expectedSummary = /skipped \[2\] unhandled event\(s\) on \[10 -> 20\] across \[1\] selector group\(s\)/;
 
       expect(results).to.eql([]);
-      expect(
-        logger.info.calledWithMatch(/skipped \[2\] unhandled event\(s\) on \[10 -> 20\] across \[1\] selector group\(s\)/)
-      ).to.eql(true);
+      expect(logger.info.calledWithMatch(expectedSummary)).to.eql(true);
       expect(
         logger.debug.calledWithMatch(/unhandled selector summary address=0x2 selector=0xabc count=2/)
       ).to.eql(true);

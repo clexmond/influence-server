@@ -1,10 +1,8 @@
 const { groupBy } = require('lodash');
 
 class BaseAuditor {
-  constructor({ name, runDelay } = {}) {
+  constructor({ name } = {}) {
     this.name = name || this.constructor.name;
-    this.runDelay = Number(runDelay || 0);
-    this.lastRunAt = 0;
   }
 
   static getStableEventKey(event) {
@@ -41,19 +39,6 @@ class BaseAuditor {
     }));
 
     return { identityChanged: false, metadataChanged };
-  }
-
-  shouldRun(now = Date.now()) {
-    if (!this.runDelay) return true;
-    return !this.lastRunAt || (now - this.lastRunAt) >= this.runDelay;
-  }
-
-  async runIfDue({ force = false, ...context } = {}) {
-    if (!force && !this.shouldRun()) return { skipped: true };
-
-    const result = await this.auditOnce(context);
-    this.lastRunAt = Date.now();
-    return { skipped: false, ...result };
   }
 }
 

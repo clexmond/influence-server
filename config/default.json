@@ -81,14 +81,11 @@
     }
   },
   "EventAuditor": {
-    "runDelay": 20000,
     "ethereum": {
-      "runDelay": 300000,
       "blockBatchSize": 10,
       "finalityBlocks": 10
     },
     "starknet": {
-      "runDelay": 300000,
       "blockBatchSize": 1000,
       "bootstrapLookbackBlocks": 5000
     }

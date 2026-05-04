@@ -49,14 +49,11 @@
     }
   },
   "EventAuditor": {
-    "runDelay": "EVENT_AUDITOR_RUN_DELAY",
     "ethereum": {
-      "runDelay": "ETHEREUM_EVENT_AUDITOR_RUN_DELAY",
       "blockBatchSize": "ETHEREUM_EVENT_AUDITOR_BLOCK_BATCH_SIZE",
       "finalityBlocks": "ETHEREUM_EVENT_AUDITOR_FINALITY_BLOCKS"
     },
     "starknet": {
-      "runDelay": "STARKNET_EVENT_AUDITOR_RUN_DELAY",
       "blockBatchSize": "STARKNET_EVENT_AUDITOR_BLOCK_BATCH_SIZE",
       "bootstrapLookbackBlocks": "STARKNET_EVENT_AUDITOR_BOOTSTRAP_LOOKBACK_BLOCKS"
     }
