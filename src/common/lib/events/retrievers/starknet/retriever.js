@@ -1,22 +1,15 @@
 const appConfig = require('config');
-const { delay, groupBy } = require('lodash');
+const { delay } = require('lodash');
 const { Timer } = require('timer-node');
 const logger = require('@common/lib/logger');
-const {
-  ActivityService,
-  StarknetEventService,
-  StarknetReconciliationBlockService
-} = require('@common/services');
+const { StarknetEventService } = require('@common/services');
 const StarknetProvider = require('@common/lib/starknet/provider');
 const { StarknetBlockCache } = require('@common/lib/cache');
-const { PRE_CONFIRMED_BLOCK_NUMBER } = require('@common/lib/starknet/models/constants');
 const StarknetEventConfig = require('./config');
 
 const DEFAULT_BLOCK_BATCH_SIZE = 1000;
 const RUN_ONCE_BLOCK_BATCH_SIZE = DEFAULT_BLOCK_BATCH_SIZE;
-const AUDIT_BLOCK_BATCH_SIZE = DEFAULT_BLOCK_BATCH_SIZE;
-const AUDIT_UNRESOLVED_BLOCK_BATCH_SIZE = 500;
-const AUDIT_L1_RETENTION_BLOCKS = 2000;
+const DEFAULT_BOOTSTRAP_LOOKBACK_BLOCKS = 25000;
 
 class StarknetRetriever {
   constructor(props = {}) {
@@ -28,118 +21,56 @@ class StarknetRetriever {
     });
   }
 
-  static getEventFingerprint(event) {
-    return [
-      event.event,
-      event.transactionHash,
-      event.logIndex,
-      event.blockHash
-    ].join(':');
-  }
-
   getTrackedAddresses() {
     return StarknetEventConfig.toArray().map(({ address }) => address);
   }
 
-  hasBlockEventsChanged({ chainEvents = [], storedEvents = [] }) {
-    if (chainEvents.length !== storedEvents.length) return true;
-
-    const chainSet = new Set(chainEvents.map(StarknetRetriever.getEventFingerprint));
-    for (const fingerprint of storedEvents.map(StarknetRetriever.getEventFingerprint)) {
-      if (!chainSet.has(fingerprint)) return true;
-    }
-
-    return false;
-  }
-
-  // The intention of this method is to run on a delay behind the current runner N number of blocks behind
-  // the current block number with the intent to catch any missed events that were not available per the provider
-  // when first retrieved. This method should be run in a separate process to avoid blocking/overlapping with the
-  // main runner process.
-  async auditOnce({ blockOffset = 10 } = {}) {
-    const logSlug = 'StarknetAuditRetriever::auditOnce';
+  async getBootstrapLastRetrievedBlock() {
     const originBlock = Number(appConfig.get('Starknet.originBlock'));
-    const parsedBlockOffset = Number(blockOffset);
-    if (!Number.isFinite(parsedBlockOffset) || parsedBlockOffset < 0) {
-      throw new Error(`Invalid blockOffset: ${blockOffset}`);
-    }
+    const bootstrapLookbackBlocks = Number(
+      appConfig.EventRetriever.starknet?.bootstrapLookbackBlocks || DEFAULT_BOOTSTRAP_LOOKBACK_BLOCKS
+    );
+    const lastAuditedFinalizedBlock = Number(await StarknetBlockCache.getLastAuditedFinalizedBlock());
+    const latestEvent = await StarknetEventService.getLatestEventByBlock();
+    const latestEventBlock = Number(latestEvent?.blockNumber);
+    let recentHeadBlock = Number.NaN;
 
-    // need to get the current head block in order to determine the starting block - offset
-    const headBlock = Number(await this.provider.getBlockNumber());
-    const startBlock = Math.max(originBlock, headBlock - parsedBlockOffset);
-    logger.info(`${logSlug}, headBlock -> startBlock: ${startBlock} -> ${headBlock}`);
-
-    let mismatchedBlocks = 0;
-    await this.forEachBlockRangeBatch({
-      fromBlock: startBlock,
-      toBlock: headBlock,
-      batchSize: AUDIT_BLOCK_BATCH_SIZE
-    }, async ({ fromBlock: batchFromBlock, toBlock: batchToBlock }) => {
-      logger.info(`${logSlug}, auditing batch [${batchFromBlock} -> ${batchToBlock}]`);
-      const chainEvents = await this.pullAndFormatEvents({ fromBlock: batchFromBlock, toBlock: batchToBlock });
-      const chainEventsByBlock = groupBy(chainEvents, 'blockNumber');
-      const storedEvents = await StarknetEventService.getEventsByBlockRange(batchFromBlock, batchToBlock);
-      const storedEventsByBlock = groupBy(storedEvents, 'blockNumber');
-
-      for (let blockNumber = batchFromBlock; blockNumber <= batchToBlock; blockNumber += 1) {
-        const blockChainEvents = chainEventsByBlock[blockNumber] || [];
-        const blockStoredEvents = storedEventsByBlock[blockNumber] || [];
-        logger.info(
-          `${logSlug}, block [${blockNumber}], chain: ${blockChainEvents.length}, stored: ${blockStoredEvents.length}`
-        );
-
-        if (this.hasBlockEventsChanged({ chainEvents: blockChainEvents, storedEvents: blockStoredEvents })) {
-          mismatchedBlocks += 1;
-          logger.warn(`${logSlug}, mismatch detected on block [${blockNumber}], reconciling`);
-
-          if (blockStoredEvents.length > 0) {
-            await StarknetEventService.updateManyAsRemoved({ blockNumber });
-            await ActivityService.purgeByRemoved();
-            await this.removeReconciliationBlocks([blockNumber]);
-          }
-
-          if (blockChainEvents.length > 0) {
-            await StarknetEventService.updateOrCreateMany(blockChainEvents);
-            await this.syncReconciliationBlocks(blockChainEvents);
-          }
-        }
+    try {
+      const headBlock = Number(await this.provider.getBlockNumber());
+      if (Number.isFinite(headBlock)) {
+        recentHeadBlock = Math.max(originBlock - 1, headBlock - bootstrapLookbackBlocks);
       }
-    });
-
-    const unresolvedResult = await this.reconcileTrackedBlocks({ headBlock });
-    if (unresolvedResult.reorgStartBlock !== null) {
-      logger.warn(`${logSlug}, reorg detected starting at block [${unresolvedResult.reorgStartBlock}]`);
-      await this.replayRangeFromBlock({
-        fromBlock: unresolvedResult.reorgStartBlock,
-        toBlock: headBlock
-      });
-      mismatchedBlocks += 1;
+    } catch (error) {
+      logger.warn(`StarknetRetriever::getBootstrapLastRetrievedBlock, unable to load head block: ${error.message}`);
     }
 
-    return { headBlock, mismatchedBlocks, startBlock };
+    const bootstrapBlock = [lastAuditedFinalizedBlock, recentHeadBlock, latestEventBlock]
+      .filter(Number.isFinite)
+      .reduce((maxValue, value) => Math.max(maxValue, value), originBlock - 1);
+
+    return {
+      bootstrapBlock,
+      candidates: {
+        lastAuditedFinalizedBlock,
+        recentHeadBlock,
+        latestEventBlock
+      }
+    };
   }
 
-  async auditRunner({ runDelay, blockOffset = 10 } = {}) {
-    const _runDelay = Number(runDelay || appConfig.EventRetriever.starknet?.auditRunDelay);
-    if (!_runDelay) throw new Error('No run delay provided');
-    const keepRunning = true;
+  async ensureBootstrapCheckpoint() {
+    const existingValue = await StarknetBlockCache.getLastRetrievedBlock();
+    const parsedValue = Number(existingValue);
+    if (Number.isFinite(parsedValue)) return parsedValue;
 
-    while (keepRunning) {
-      const timer = new Timer({ label: 'StarknetAuditRetriever-timer' }).start();
-      const logSlug = 'StarknetAuditRetriever::auditRunner';
-      try {
-        await this.auditOnce({ blockOffset });
-      } catch (error) {
-        logger.error(`${logSlug}, runner iteration failed`);
-        logger.error(error);
-      }
-
-      if (timer.ms() < _runDelay) {
-        const delayMs = _runDelay - timer.ms();
-        logger.info(`${logSlug}, run delay not met, delaying for [${delayMs}ms]...`);
-        await new Promise((resolve) => { delay(resolve, delayMs); });
-      }
-    }
+    const { bootstrapBlock, candidates } = await this.getBootstrapLastRetrievedBlock();
+    await StarknetBlockCache.setLastRetrievedBlock(bootstrapBlock);
+    logger.info(
+      `StarknetRetriever::ensureBootstrapCheckpoint, bootstrapped to block ${bootstrapBlock}`
+      + ` (audited=${candidates.lastAuditedFinalizedBlock}, recentHead=${candidates.recentHeadBlock},`
+      + ` latestEvent=${candidates.latestEventBlock})`
+    );
+    return bootstrapBlock;
   }
 
   async runOnce({ blocks, fromBlock, toBlock, onlyMisingBlocks = false } = {}) {
@@ -181,8 +112,6 @@ class StarknetRetriever {
         ));
       }
     }
-
-    await this.retrieveAndProcessRange({ fromBlock: 'pre_confirmed', toBlock: 'pre_confirmed' });
   }
 
   async runner({ runDelay } = {}) {
@@ -193,7 +122,7 @@ class StarknetRetriever {
 
     const keepRunning = true;
     const originBlock = Number(appConfig.get('Starknet.originBlock'));
-    const reconciliationLookback = Number(appConfig.EventRetriever.starknet?.reconciliationLookback || 50);
+    const batchSize = Number(appConfig.EventRetriever.starknet?.blockBatchSize || DEFAULT_BLOCK_BATCH_SIZE);
 
     while (keepRunning) {
       const logSlug = 'StarknetRetriever::runner';
@@ -202,22 +131,18 @@ class StarknetRetriever {
       let toBlock = 0;
 
       try {
-        const latestConfirmedEvent = await StarknetEventService.getLatestConfirmedEventByBlock();
-        const lastSyncedBlock = Number(await StarknetBlockCache.getl1AcceptedBlock() || originBlock);
-        const baseBlock = Math.max(
-          Number(latestConfirmedEvent?.blockNumber || originBlock),
-          lastSyncedBlock
-        );
-        fromBlock = Math.max(originBlock, baseBlock - reconciliationLookback);
+        const lastRetrieved = await this.ensureBootstrapCheckpoint();
+        fromBlock = Math.max(originBlock, lastRetrieved + 1);
         toBlock = await this.provider.getBlockNumber();
-        logger.info(`${logSlug}, retrieve range [${fromBlock} -> ${toBlock}]`);
         if (Number(fromBlock) <= Number(toBlock)) {
-          await this.retrieveAndProcessRange({ fromBlock, toBlock });
-          await StarknetBlockCache.setl1AcceptedBlock(toBlock);
+          const batchToBlock = Math.min(Number(toBlock), fromBlock + batchSize - 1);
+          logger.info(`${logSlug}, retrieve range [${fromBlock} -> ${batchToBlock}]`);
+          await this.retrieveAndProcessRange({ fromBlock, toBlock: batchToBlock });
+          await StarknetBlockCache.setLastRetrievedBlock(batchToBlock);
+          logger.info(`${logSlug}, advanced checkpoint to block ${batchToBlock}`);
+        } else {
+          logger.debug(`${logSlug}, caught up at block ${toBlock}`);
         }
-
-        // Always pull PRE_CONFIRMED in each pass to keep recent events fresh.
-        await this.retrieveAndProcessRange({ fromBlock: 'pre_confirmed', toBlock: 'pre_confirmed' });
       } catch (error) {
         logger.error(`${logSlug}, runner failed processing from block ${fromBlock} to block ${toBlock}`);
         logger.error(error);
@@ -288,105 +213,7 @@ class StarknetRetriever {
 
     logger.info(`${logSlug}, [${events.length}] event(s) on [${fromBlock} -> ${toBlock}]`);
     await StarknetEventService.updateOrCreateMany(events);
-    await this.syncReconciliationBlocks(events);
     return events.length;
-  }
-
-  async syncReconciliationBlocks(events = []) {
-    if (!Array.isArray(events) || events.length === 0) return;
-
-    const blocks = [];
-    events.forEach((event) => {
-      const blockNumber = Number(event.blockNumber);
-      if (!Number.isFinite(blockNumber) || blockNumber === PRE_CONFIRMED_BLOCK_NUMBER) return;
-
-      blocks.push({
-        blockNumber,
-        blockHash: event.blockHash,
-        status: event.status
-      });
-    });
-
-    await StarknetReconciliationBlockService.upsertMany(blocks);
-  }
-
-  async removeReconciliationBlocks(blockNumbers = []) {
-    if (!Array.isArray(blockNumbers) || blockNumbers.length === 0) return;
-    await StarknetReconciliationBlockService.deleteByBlockNumbers(blockNumbers);
-  }
-
-  async reconcileTrackedBlocks({ headBlock }) {
-    const retentionBlocks = Number(
-      appConfig.EventRetriever.starknet?.auditL1RetentionBlocks || AUDIT_L1_RETENTION_BLOCKS
-    );
-    const batchSize = Number(
-      appConfig.EventRetriever.starknet?.auditUnresolvedBlockBatchSize || AUDIT_UNRESOLVED_BLOCK_BATCH_SIZE
-    );
-
-    const minRetainedL1Block = headBlock - retentionBlocks;
-    await StarknetReconciliationBlockService.pruneAcceptedOnL1OlderThan(minRetainedL1Block);
-    const trackedBlocks = await StarknetReconciliationBlockService.getTrackedBlocks({
-      headBlock,
-      retentionBlocks,
-      limit: batchSize
-    });
-
-    const upserts = [];
-    const deletions = [];
-    let reorgStartBlock = null;
-    for (const tracked of trackedBlocks) {
-      const blockNumber = Number(tracked.blockNumber);
-      const chainBlock = await this.provider.getBlock(blockNumber);
-      const hashMismatch = chainBlock.blockHash !== tracked.blockHash;
-      const statusRegressed = tracked.status === 'ACCEPTED_ON_L1' && chainBlock.status !== 'ACCEPTED_ON_L1';
-
-      if (hashMismatch || statusRegressed) {
-        reorgStartBlock = blockNumber;
-        break;
-      }
-
-      if (chainBlock.status === 'ACCEPTED_ON_L1') {
-        if (tracked.status !== 'ACCEPTED_ON_L1') await StarknetEventService.updateBlockToL1Accepted(blockNumber);
-        if ((headBlock - blockNumber) > retentionBlocks) {
-          deletions.push(blockNumber);
-        } else {
-          upserts.push({
-            blockNumber,
-            blockHash: chainBlock.blockHash,
-            status: 'ACCEPTED_ON_L1'
-          });
-        }
-      } else {
-        upserts.push({
-          blockNumber,
-          blockHash: chainBlock.blockHash,
-          status: chainBlock.status
-        });
-      }
-    }
-
-    if (upserts.length > 0) await StarknetReconciliationBlockService.upsertMany(upserts);
-    if (deletions.length > 0) await StarknetReconciliationBlockService.deleteByBlockNumbers(deletions);
-
-    return {
-      checkedBlocks: trackedBlocks.length,
-      reorgStartBlock
-    };
-  }
-
-  async replayRangeFromBlock({ fromBlock, toBlock }) {
-    if (!Number.isFinite(fromBlock) || !Number.isFinite(toBlock) || fromBlock > toBlock) {
-      throw new Error(`Invalid replay range [${fromBlock} -> ${toBlock}]`);
-    }
-
-    await StarknetReconciliationBlockService.deleteFromBlock(fromBlock);
-
-    await StarknetEventService.updateManyAsRemoved({
-      blockNumber: { $gte: fromBlock, $lte: toBlock },
-      removed: { $ne: true }
-    });
-    await ActivityService.purgeByRemoved();
-    await this.retrieveAndProcessRange({ fromBlock, toBlock });
   }
 }
 

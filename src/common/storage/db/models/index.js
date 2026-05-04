@@ -14,7 +14,6 @@ const IndexItem = require('./IndexItem');
 const Notification = require('./Notification');
 const NotificationModels = require('./Notifications');
 const Referral = require('./Referral');
-const StarknetReconciliationBlock = require('./StarknetReconciliationBlock');
 const SwayClaim = require('./SwayClaim');
 const SwayCrossing = require('./SwayCrossing');
 const User = require('./User');
@@ -37,7 +36,6 @@ module.exports = {
   Notification,
   ...NotificationModels,
   Referral,
-  StarknetReconciliationBlock,
   SwayClaim,
   SwayCrossing,
   User,

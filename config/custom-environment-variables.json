@@ -37,16 +37,27 @@
   "EventRetriever": {
     "runDelay": "EVENT_RETRIEVER_RUN_DELAY",
     "ethereum": {
-      "runDelay": "ETHEREUM_EVENT_RETRIEVER_RUN_DELAY"
+      "runDelay": "ETHEREUM_EVENT_RETRIEVER_RUN_DELAY",
+      "blockBatchSize": "ETHEREUM_EVENT_RETRIEVER_BLOCK_BATCH_SIZE",
+      "bootstrapLookbackBlocks": "ETHEREUM_EVENT_RETRIEVER_BOOTSTRAP_LOOKBACK_BLOCKS"
     },
     "starknet": {
       "runDelay": "STARKNET_EVENT_RETRIEVER_RUN_DELAY",
-      "auditRunDelay": "STARKNET_EVENT_RETRIEVER_AUDIT_RUN_DELAY",
-      "auditBlockOffset": "STARKNET_EVENT_RETRIEVER_AUDIT_BLOCK_OFFSET",
       "rpcProvider": "STARKNET_EVENT_RETRIEVER_RPC_PROVIDER",
-      "reconciliationLookback": "STARKNET_EVENT_RETRIEVER_RECONCILIATION_LOOKBACK",
-      "auditUnresolvedBlockBatchSize": "STARKNET_EVENT_RETRIEVER_AUDIT_UNRESOLVED_BLOCK_BATCH_SIZE",
-      "auditL1RetentionBlocks": "STARKNET_EVENT_RETRIEVER_AUDIT_L1_RETENTION_BLOCKS"
+      "blockBatchSize": "STARKNET_EVENT_RETRIEVER_BLOCK_BATCH_SIZE",
+      "bootstrapLookbackBlocks": "STARKNET_EVENT_RETRIEVER_BOOTSTRAP_LOOKBACK_BLOCKS"
+    }
+  },
+  "EventAuditor": {
+    "runDelay": "EVENT_AUDITOR_RUN_DELAY",
+    "ethereum": {
+      "runDelay": "ETHEREUM_EVENT_AUDITOR_RUN_DELAY",
+      "blockBatchSize": "ETHEREUM_EVENT_AUDITOR_BLOCK_BATCH_SIZE",
+      "finalityBlocks": "ETHEREUM_EVENT_AUDITOR_FINALITY_BLOCKS"
+    },
+    "starknet": {
+      "runDelay": "STARKNET_EVENT_AUDITOR_RUN_DELAY",
+      "blockBatchSize": "STARKNET_EVENT_AUDITOR_BLOCK_BATCH_SIZE"
     }
   },
   "EventProcessor": {

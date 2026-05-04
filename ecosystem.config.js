@@ -21,6 +21,12 @@ module.exports = {
       watch_delay: 500
     },
     {
+      name: 'event-auditor',
+      script: './src/workers/eventAuditor.js',
+      watch: ['./src/workers', './src/common'],
+      watch_delay: 500
+    },
+    {
       name: 'event-processor',
       script: './src/workers/eventProcessor.js',
       watch: ['./src/workers', './src/common'],

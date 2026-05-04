@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { orderBy } = require('lodash');
-const { PRE_CONFIRMED_BLOCK_HASH, PRE_CONFIRMED_BLOCK_NUMBER } = require('@common/lib/starknet/models/constants');
+const { PRE_CONFIRMED_BLOCK_HASH } = require('@common/lib/starknet/models/constants');
 
 class StarknetEventService {
   static async updateOrCreateMany(events) {
@@ -51,34 +51,8 @@ class StarknetEventService {
     return result;
   }
 
-  static updateManyToL1Accepted(blockNumber) {
-    return mongoose.model('Starknet').updateMany(
-      { status: 'ACCEPTED_ON_L2', blockNumber: { $lte: blockNumber } },
-      { status: 'ACCEPTED_ON_L1' }
-    );
-  }
-
-  static updateBlockToL1Accepted(blockNumber) {
-    return mongoose.model('Starknet').updateMany(
-      { status: 'ACCEPTED_ON_L2', blockNumber, removed: { $ne: true } },
-      { status: 'ACCEPTED_ON_L1' }
-    );
-  }
-
   static getLatestEventByBlock() {
     return mongoose.model('Starknet').findOne({ removed: { $ne: true } }).sort({ blockNumber: -1 });
-  }
-
-  static getLatestConfirmedEventByBlock() {
-    return mongoose.model('Starknet').findOne({
-      blockNumber: { $lt: PRE_CONFIRMED_BLOCK_NUMBER },
-      removed: { $ne: true }
-    }).sort({ blockNumber: -1 });
-  }
-
-  static getLatestAcceptedOnL1() {
-    return mongoose.model('Starknet').findOne({ status: 'ACCEPTED_ON_L1', removed: { $ne: true } })
-      .sort({ blockNumber: -1 });
   }
 
   static hasEventsForBlock(blockNumber) {
@@ -105,6 +79,16 @@ class StarknetEventService {
   */
   static updateManyAsRemoved(filter) {
     return mongoose.model('Starknet').updateMany(filter, { removed: true, lastProcessed: null });
+  }
+
+  static resetLastProcessedFromBlock(blockNumber) {
+    return mongoose.model('Starknet').updateMany(
+      {
+        blockNumber: { $gte: blockNumber },
+        removed: { $ne: true }
+      },
+      { lastProcessed: null }
+    );
   }
 }
 

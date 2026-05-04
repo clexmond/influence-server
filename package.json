@@ -9,7 +9,7 @@
     "updatePositions": "node ./bin/updatePositions.js",
     "ethereumEventRetriever": "node ./src/workers/eventRetriever.js --eventSource=ethereum",
     "starknetEventRetriever": "node ./src/workers/eventRetriever.js --eventSource=starknet",
-    "starknetEventAuditor": "node ./src/workers/starknetEventAuditor.js",
+    "eventAuditor": "node ./src/workers/eventAuditor.js",
     "eventProcessor": "node ./src/workers/eventProcessor.js",
     "elasticIndexer": "node ./src/workers/elasticsearch.js",
     "nftCardBuilder": "node ./src/workers/nftCardBuilder.js",
