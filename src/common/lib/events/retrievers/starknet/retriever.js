@@ -190,6 +190,7 @@ class StarknetRetriever {
     if (typeof _fromBlock === 'undefined') throw new Error('Missing required fromBlock value');
 
     const events = [];
+    const unhandledEvents = [];
     const rawEvents = await this.provider.getEvents({
       addresses: this.getTrackedAddresses(),
       fromBlock: _fromBlock,
@@ -201,9 +202,36 @@ class StarknetRetriever {
         // if the handler is configured to ignore the event, skip it
         if (!handler.ignore) events.push(handler.parseEvent(event));
       } else {
-        logger.warn(`Unable to find handler for event: ${JSON.stringify(event)}`);
+        unhandledEvents.push(event);
       }
     });
+
+    if (unhandledEvents.length > 0) {
+      const unhandledGroups = unhandledEvents.reduce((acc, event) => {
+        const selector = event.keys?.[0] || 'unknown';
+        const address = event.address || 'unknown';
+        const key = `${address}:${selector}`;
+        if (!acc[key]) acc[key] = { address, count: 0, selector };
+        acc[key].count += 1;
+        return acc;
+      }, {});
+
+      logger.info(
+        `StarknetRetriever::pullAndFormatEvents, skipped [${unhandledEvents.length}] unhandled event(s)`
+        + ` on [${_fromBlock} -> ${_toBlock}] across [${Object.keys(unhandledGroups).length}] selector group(s)`
+      );
+
+      Object.values(unhandledGroups).forEach(({ address, count, selector }) => {
+        logger.debug(
+          `StarknetRetriever::pullAndFormatEvents, unhandled selector summary`
+          + ` address=${address} selector=${selector} count=${count}`
+        );
+      });
+
+      unhandledEvents.forEach((event) => {
+        logger.debug(`Unable to find handler for event: ${JSON.stringify(event)}`);
+      });
+    }
 
     return events;
   }

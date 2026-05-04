@@ -2,6 +2,7 @@ const { expect } = require('chai');
 const sinon = require('sinon');
 const appConfig = require('config');
 const { StarknetBlockCache } = require('@common/lib/cache');
+const logger = require('@common/lib/logger');
 const { StarknetEventService } = require('@common/services');
 const { StarknetRetriever } = require('@common/lib/events/retrievers/starknet/retriever');
 const StarknetEventConfig = require('../../../../../../../src/common/lib/events/retrievers/starknet/config');
@@ -42,6 +43,8 @@ describe('Starknet Event Retriever', function () {
 
   describe('pullAndFormatEvents', function () {
     beforeEach(function () {
+      sandbox.stub(logger, 'info');
+      sandbox.stub(logger, 'debug');
       sandbox.stub(StarknetEventConfig, 'toArray').returns([{
         address: '0x1',
         handlers: { '0x1': FakeHandler }
@@ -69,6 +72,34 @@ describe('Starknet Event Retriever', function () {
       FakeHandler.ignore = undefined;
       results = await retriever.pullAndFormatEvents({ blockNumber: 1 });
       expect(results.length).to.eql(1);
+    });
+
+    it('should summarize unhandled events at info and only log raw payloads at debug', async function () {
+      const unhandledEvent = {
+        address: '0x2',
+        blockNumber: 10,
+        data: ['0x1'],
+        keys: ['0xabc'],
+        transactionHash: '0xdeadbeef'
+      };
+
+      retriever.provider.getEvents.restore();
+      StarknetEventConfig.getHandler.restore();
+      sandbox.stub(retriever.provider, 'getEvents').resolves([unhandledEvent, unhandledEvent]);
+      sandbox.stub(StarknetEventConfig, 'getHandler').returns(null);
+
+      const results = await retriever.pullAndFormatEvents({ fromBlock: 10, toBlock: 20 });
+
+      expect(results).to.eql([]);
+      expect(
+        logger.info.calledWithMatch(/skipped \[2\] unhandled event\(s\) on \[10 -> 20\] across \[1\] selector group\(s\)/)
+      ).to.eql(true);
+      expect(
+        logger.debug.calledWithMatch(/unhandled selector summary address=0x2 selector=0xabc count=2/)
+      ).to.eql(true);
+      expect(
+        logger.debug.calledWithMatch(/Unable to find handler for event: /)
+      ).to.eql(true);
     });
   });
 
