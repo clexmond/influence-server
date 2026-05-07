@@ -26,6 +26,22 @@ class StarknetBlockCache extends BaseMongoCache {
     return this.cacheInstance.get('CURRENT_STARKNET_BLOCK_NUMBER');
   }
 
+  static setCurrentBlockTimestamp(blockTimestamp) {
+    return this.cacheInstance.set('CURRENT_STARKNET_BLOCK_TIMESTAMP', blockTimestamp);
+  }
+
+  static getCurrentBlockTimestamp() {
+    return this.cacheInstance.get('CURRENT_STARKNET_BLOCK_TIMESTAMP');
+  }
+
+  static setLastEmittedCurrentBlockNumber(blockNumber) {
+    return this.cacheInstance.set('LAST_EMITTED_CURRENT_STARKNET_BLOCK_NUMBER', blockNumber);
+  }
+
+  static getLastEmittedCurrentBlockNumber() {
+    return this.cacheInstance.get('LAST_EMITTED_CURRENT_STARKNET_BLOCK_NUMBER');
+  }
+
   static getLastAuditedFinalizedBlock() {
     return this.cacheInstance.get('LAST_AUDITED_FINALIZED_STARKNET_BLOCK');
   }

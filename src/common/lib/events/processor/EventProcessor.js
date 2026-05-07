@@ -1,7 +1,6 @@
 const { delay } = require('lodash');
 const { Timer } = require('timer-node');
 const { eachSeries } = require('async');
-const StarknetProvider = require('@common/lib/starknet/provider');
 const EventService = require('@common/services/Event');
 const { StarknetBlockCache } = require('@common/lib/cache');
 const logger = require('@common/lib/logger');
@@ -12,7 +11,6 @@ class EventProcessor {
   constructor(props = {}) {
     if (!props.runDelay) throw new Error('Missing required value for runDelay');
     this.runDelay = props.runDelay;
-    this.starknetProvider = new StarknetProvider();
   }
 
   async process({ events }) {
@@ -33,27 +31,50 @@ class EventProcessor {
     });
   }
 
-  // get and cache the current on chain block number
-  async processStarknetBlockNumber() {
-    try {
-      const blockNumber = await this.starknetProvider.getBlockNumber();
-      const cachedBlockNumber = await StarknetBlockCache.getCurrentBlockNumber();
-      if (blockNumber && blockNumber !== cachedBlockNumber) {
-        // update the cache (NOTE: this value is returned in /events header)
-        await StarknetBlockCache.setCurrentBlockNumber(blockNumber);
+  async emitCachedStarknetBlockNumber() {
+    const rawCurrentBlockNumber = await StarknetBlockCache.getCurrentBlockNumber();
+    const currentBlockNumber = (rawCurrentBlockNumber === null || typeof rawCurrentBlockNumber === 'undefined')
+      ? Number.NaN
+      : Number(rawCurrentBlockNumber);
+    const rawPrevious = await StarknetBlockCache.getLastEmittedCurrentBlockNumber();
+    const previous = (rawPrevious === null || typeof rawPrevious === 'undefined') ? Number.NaN : Number(rawPrevious);
 
-        // emit eth block number event
-        await eventEmitter.broadcast({
-          type: 'CURRENT_STARKNET_BLOCK_NUMBER',
-          body: {
-            blockNumber,
-            previous: cachedBlockNumber
-          }
-        });
-      }
-    } catch (error) {
-      logger.warn(`EventProcessor::processStarknetBlockNumber: ${error.message}`);
+    if (!Number.isFinite(currentBlockNumber) || currentBlockNumber === previous) return false;
+
+    const rawBlockTimestamp = await StarknetBlockCache.getCurrentBlockTimestamp();
+    const blockTimestamp = (rawBlockTimestamp === null || typeof rawBlockTimestamp === 'undefined')
+      ? Number.NaN
+      : Number(rawBlockTimestamp);
+    const body = {
+      blockNumber: currentBlockNumber,
+      previous: Number.isFinite(previous) ? previous : null
+    };
+
+    if (Number.isFinite(blockTimestamp)) {
+      body.blockTimestamp = blockTimestamp;
     }
+
+    await eventEmitter.broadcast({
+      type: 'CURRENT_STARKNET_BLOCK_NUMBER',
+      body
+    });
+    await StarknetBlockCache.setLastEmittedCurrentBlockNumber(currentBlockNumber);
+    logger.debug(
+      [
+        'EventProcessor::emitCachedStarknetBlockNumber, emitted CURRENT_STARKNET_BLOCK_NUMBER',
+        `blockNumber=${currentBlockNumber}`,
+        `previous=${previous}`,
+        ...(Number.isFinite(blockTimestamp) ? [`blockTimestamp=${blockTimestamp}`] : [])
+      ].join(' ')
+    );
+    return true;
+  }
+
+  async emitCachedStarknetBlockNumberIfCaughtUp() {
+    const remainingEvents = await EventService.getNonProcessed({ limit: 1 });
+    if (remainingEvents.length > 0) return false;
+
+    return this.emitCachedStarknetBlockNumber();
   }
 
   async main({ timeStamp } = {}) {
@@ -63,7 +84,9 @@ class EventProcessor {
     logger.info(`EventProcessor::main, event(s) to process: ${events.length}`);
 
     await this.process({ events });
-    await this.processStarknetBlockNumber();
+    if (typeof timeStamp === 'undefined' || timeStamp === null) {
+      await this.emitCachedStarknetBlockNumberIfCaughtUp();
+    }
 
     // if time elapsed is greater than the run delay, run now, else delay the diff
     if (timer.ms() > this.runDelay) return this.main();

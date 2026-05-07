@@ -79,6 +79,31 @@ class StarknetRetriever {
     return bootstrapBlock;
   }
 
+  async cacheCurrentBlock(blockNumber) {
+    const parsedBlockNumber = Number(blockNumber);
+    if (!Number.isFinite(parsedBlockNumber)) return;
+
+    const cachedBlockNumber = Number(await StarknetBlockCache.getCurrentBlockNumber());
+    if (parsedBlockNumber === cachedBlockNumber) return;
+
+    let currentBlockTimestamp = Number.NaN;
+    try {
+      const currentBlock = await this.provider.getBlock(parsedBlockNumber);
+      currentBlockTimestamp = Number(currentBlock?.timestamp);
+    } catch (error) {
+      logger.warn(
+        `StarknetRetriever::cacheCurrentBlock, unable to load block ${parsedBlockNumber} timestamp: ${error.message}`
+      );
+    }
+
+    const currentBlockNumber = parsedBlockNumber;
+
+    await StarknetBlockCache.setCurrentBlockNumber(currentBlockNumber);
+    await StarknetBlockCache.setCurrentBlockTimestamp(
+      Number.isFinite(currentBlockTimestamp) ? currentBlockTimestamp : null
+    );
+  }
+
   async runOnce({ blocks, fromBlock, toBlock, onlyMisingBlocks = false } = {}) {
     if (blocks) {
       logger.info(`StarknetRetriever::runOnce, blocks: ${blocks}`);
@@ -97,6 +122,9 @@ class StarknetRetriever {
       const _toBlock = (toBlock === 'latest' || typeof toBlock === 'undefined' || toBlock === null)
         ? await this.provider.getBlockNumber()
         : Number(toBlock);
+      if (toBlock === 'latest' || typeof toBlock === 'undefined' || toBlock === null) {
+        await this.cacheCurrentBlock(_toBlock);
+      }
 
       logger.info(`StarknetRetriever::runOnce, fromBlock -> toBlock: ${_fromBlock} -> ${_toBlock}`);
       if (onlyMisingBlocks) {
@@ -140,6 +168,7 @@ class StarknetRetriever {
         const lastRetrieved = await this.ensureBootstrapCheckpoint();
         fromBlock = Math.max(originBlock, lastRetrieved + 1);
         toBlock = await this.provider.getBlockNumber();
+        await this.cacheCurrentBlock(toBlock);
         if (Number(fromBlock) <= Number(toBlock)) {
           const batchToBlock = Math.min(Number(toBlock), fromBlock + batchSize - 1);
           logger.info(`${logSlug}, retrieve range [${fromBlock} -> ${batchToBlock}]`);
