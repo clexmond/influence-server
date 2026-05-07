@@ -1,7 +1,7 @@
 const appConfig = require('config');
 const { Address } = require('@influenceth/sdk');
 const uuid = require('short-uuid');
-const starknet = require('starknet');
+const starknetClient = require('@common/lib/starknet/client');
 const UserService = require('@common/services/User');
 const { AuthCache } = require('@common/lib/cache');
 const logger = require('@common/lib/logger');
@@ -82,7 +82,7 @@ class AuthService {
 
     // Nonce has now been used, so remove from cache to avoid replay attacks
     await AuthCache.deleteLoginMessage(_address);
-    const provider = new starknet.RpcProvider({ nodeUrl: appConfig.get('Starknet.rpcProvider') });
+    const provider = await starknetClient.createRpcProvider({ nodeUrl: appConfig.get('Starknet.rpcProvider') });
 
     // If the account contract isn't deployed yet, issue a token (while this appears unsafe, the only
     // thing the user could do is update preferences, watchlist, etc. and if they were spoofing an
@@ -122,8 +122,8 @@ class AuthService {
       }
 
       try {
-        const hash = starknet.typedData.getMessageHash(messageToHash, _address);
-        const compiled = starknet.CallData.compile({
+        const hash = starknetClient.starknet.typedData.getMessageHash(messageToHash, _address);
+        const compiled = starknetClient.starknet.CallData.compile({
           hash: BigInt(hash).toString(),
           signature: signature.split(',').map((x) => BigInt(x).toString())
         });

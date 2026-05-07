@@ -1,5 +1,5 @@
 const appConfig = require('config');
-const { uint256: { uint256ToBN }, number: { toHex } } = require('starknet');
+const { uint256: { uint256ToBN }, num: { toHex } } = require('starknet');
 const { Address } = require('@influenceth/sdk');
 const { CHAINS } = require('@common/constants');
 const { CrossingService, SwayCrossingService } = require('@common/services');

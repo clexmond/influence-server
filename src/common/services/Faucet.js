@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
 const appConfig = require('config');
-const { RpcProvider, Account, Contract, uint256 } = require('starknet');
 const { Address } = require('@influenceth/sdk');
 const logger = require('@common/lib/logger');
+const starknetClient = require('@common/lib/starknet/client');
 
 const erc20Abi = require('@common/lib/starknet/abis/erc20.json');
 const { ValidationError } = require('../lib/errors');
@@ -65,19 +65,25 @@ class FaucetService {
     }
 
     // Execute the transfer on-chain
-    const provider = new RpcProvider({ nodeUrl: appConfig.get('Starknet.rpcProvider') });
-    const account = new Account(
+    const provider = await starknetClient.createRpcProvider({ nodeUrl: appConfig.get('Starknet.rpcProvider') });
+    const account = starknetClient.createAccount({
       provider,
-      appConfig.get('Contracts.starknet.faucet'),
-      appConfig.get('Starknet.faucetPrivateKey')
-    );
+      address: appConfig.get('Contracts.starknet.faucet'),
+      signer: appConfig.get('Starknet.faucetPrivateKey')
+    });
 
-    const erc20 = new Contract(erc20Abi, tokens[token].contract, provider);
+    const erc20 = starknetClient.createContract({
+      abi: erc20Abi,
+      address: tokens[token].contract,
+      providerOrAccount: account
+    });
     let txHash;
 
     try {
-      erc20.connect(account);
-      const response = await erc20.transfer(recipient, uint256.bnToUint256(tokens[token].amount));
+      const response = await erc20.transfer(
+        recipient,
+        starknetClient.starknet.uint256.bnToUint256(tokens[token].amount)
+      );
       txHash = response.transaction_hash;
     } catch (e) {
       logger.warn(e.message || e);
