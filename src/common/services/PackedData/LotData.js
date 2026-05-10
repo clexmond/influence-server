@@ -141,7 +141,7 @@ class PackedLotDataService {
     
     const lotIndices = range(1, lotCount + 1);
     for (const lotIndex of lotIndices) {
-      packed.set(lotIndex, 1 << LotAttribute.LEASE_STATUS.shift);
+      packed.set(lotIndex - 1, 1 << LotAttribute.LEASE_STATUS.shift);
     }
 
     await this._cacheSet(asteroidEntity, packed);
