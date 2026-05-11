@@ -131,6 +131,7 @@ const getActivity = async (ctx) => {
   ctx.status = 200;
   ctx.set('Eth-Block-Number', await EthereumBlockCache.getCurrentBlockNumber());
   ctx.set('Starknet-Block-Number', await StarknetBlockCache.getCurrentBlockNumber());
+  ctx.set('Starknet-Block-Timestamp', await StarknetBlockCache.getCurrentBlockTimestamp());
   ctx.set('Total-Hits', totalCount);
 
   // Flag hidden docs
@@ -181,7 +182,10 @@ const updateUser = async (ctx) => {
 // Setup routes
 const router = new KoaRouter()
   .use(koaJwt({ secret: appConfig.get('App.jwtSecret') }))
-  .use(cors({ origin: allowedOrigin, exposeHeaders: ['Total-Hits', 'Eth-Block-Number', 'Starknet-Block-Number'] }))
+  .use(cors({
+    origin: allowedOrigin,
+    exposeHeaders: ['Total-Hits', 'Eth-Block-Number', 'Starknet-Block-Number', 'Starknet-Block-Timestamp']
+  }))
   .use(loadUser)
   .use(bodyParser())
   .get('/v2/user', getUser)
