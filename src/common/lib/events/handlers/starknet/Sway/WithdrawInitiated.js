@@ -1,5 +1,5 @@
 const { Address } = require('@influenceth/sdk');
-const { uint256: { uint256ToBN }, number: { toHex } } = require('starknet');
+const { uint256: { uint256ToBN }, num: { toHex } } = require('starknet');
 const { SwayCrossingService } = require('@common/services');
 const BaseHandler = require('../Handler');
 

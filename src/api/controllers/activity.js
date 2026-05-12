@@ -15,6 +15,7 @@ const getActivities = async function (ctx) {
   ctx.status = 200;
   ctx.set('Eth-Block-Number', await EthereumBlockCache.getCurrentBlockNumber());
   ctx.set('Starknet-Block-Number', await StarknetBlockCache.getCurrentBlockNumber());
+  ctx.set('Starknet-Block-Timestamp', await StarknetBlockCache.getCurrentBlockTimestamp());
   ctx.body = docs;
 };
 
@@ -29,7 +30,10 @@ const getOngoingActivities = async function (ctx) {
 };
 
 const router = new KoaRouter()
-  .use(cors({ origin: allowedOrigin }))
+  .use(cors({
+    origin: allowedOrigin,
+    exposeHeaders: ['Eth-Block-Number', 'Starknet-Block-Number', 'Starknet-Block-Timestamp']
+  }))
   .get('/v2/activity', getActivities)
   .get('/v2/activity/ongoing/:asteroid', getOngoingActivities);
 

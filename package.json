@@ -82,7 +82,7 @@
     "socket.io": "4.7.5",
     "socket.io-client": "4.7.5",
     "socketio-jwt": "^4.6.2",
-    "starknet": "^6.7.0",
+    "starknet": "^8.9.0",
     "stripe": "^17.4.0",
     "svg.js": "^2.7.1",
     "svgdom": "^0.1.8",
@@ -107,7 +107,7 @@
     "supertest": "6.3.3"
   },
   "engines": {
-    "node": "20.x"
+    "node": "22.x"
   },
   "_moduleAliases": {
     "@api": "./src/api",

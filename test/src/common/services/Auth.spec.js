@@ -1,7 +1,10 @@
 const appConfig = require('config');
 const { expect } = require('chai');
 const mongoose = require('mongoose');
+const UserService = require('@common/services/User');
 const AuthService = require('@common/services/Auth');
+const { AuthCache } = require('@common/lib/cache');
+const starknetClient = require('@common/lib/starknet/client');
 
 describe('AuthService', function () {
   let configState;
@@ -99,6 +102,106 @@ describe('AuthService', function () {
         error = e;
       }
       expect(error).to.be.an('error');
+    });
+  });
+
+  describe('verifyChallenge', function () {
+    it('should throw if the cached nonce is missing', async function () {
+      this._sandbox.stub(AuthCache, 'getLoginMessage').resolves(null);
+
+      let error;
+      try {
+        await AuthService.verifyChallenge({
+          address: this.GLOBALS.TEST_STARKNET_WALLET,
+          signature: '1,2'
+        });
+      } catch (e) {
+        error = e;
+      }
+
+      expect(error).to.be.an('error');
+      expect(error.message).to.equal('Authentication code expired. Please try again.');
+    });
+
+    it('should allow undeployed accounts without signature verification', async function () {
+      const provider = {
+        getClassAt: this._sandbox.stub().rejects(new Error('not deployed')),
+        callContract: this._sandbox.stub()
+      };
+      const expectedUser = { address: this.GLOBALS.TEST_STARKNET_WALLET, isDeployed: false };
+
+      this._sandbox.stub(AuthCache, 'getLoginMessage').resolves('nonce');
+      this._sandbox.stub(AuthCache, 'deleteLoginMessage').resolves();
+      this._sandbox.stub(starknetClient, 'createRpcProvider').resolves(provider);
+      const userStub = this._sandbox.stub(UserService, 'findOrCreateByAddress').resolves(expectedUser);
+
+      const result = await AuthService.verifyChallenge({
+        address: this.GLOBALS.TEST_STARKNET_WALLET,
+        signature: '1,2',
+        referredBy: '0x123'
+      });
+
+      expect(provider.callContract.called).to.equal(false);
+      expect(userStub.calledOnceWithExactly({
+        address: this.GLOBALS.TEST_STARKNET_WALLET,
+        isDeployed: false,
+        referredBy: '0x123'
+      })).to.equal(true);
+      expect(result).to.deep.equal(expectedUser);
+    });
+
+    it('should verify deployed account signatures through the Starknet provider', async function () {
+      const provider = {
+        getClassAt: this._sandbox.stub().resolves({}),
+        callContract: this._sandbox.stub().resolves(['1'])
+      };
+      const expectedUser = { address: this.GLOBALS.TEST_STARKNET_WALLET, isDeployed: true };
+
+      this._sandbox.stub(AuthCache, 'getLoginMessage').resolves('nonce');
+      this._sandbox.stub(AuthCache, 'deleteLoginMessage').resolves();
+      this._sandbox.stub(starknetClient, 'createRpcProvider').resolves(provider);
+      this._sandbox.stub(starknetClient.starknet.typedData, 'getMessageHash').returns('0x123');
+      this._sandbox.stub(starknetClient.starknet.CallData, 'compile').returns(['compiled']);
+      const userStub = this._sandbox.stub(UserService, 'findOrCreateByAddress').resolves(expectedUser);
+
+      const result = await AuthService.verifyChallenge({
+        address: this.GLOBALS.TEST_STARKNET_WALLET,
+        signature: '1,2'
+      });
+
+      expect(provider.callContract.calledOnce).to.equal(true);
+      expect(userStub.calledOnceWithExactly({
+        address: this.GLOBALS.TEST_STARKNET_WALLET,
+        isDeployed: true,
+        referredBy: undefined
+      })).to.equal(true);
+      expect(result).to.deep.equal(expectedUser);
+    });
+
+    it('should reject invalid deployed account signatures', async function () {
+      const provider = {
+        getClassAt: this._sandbox.stub().resolves({}),
+        callContract: this._sandbox.stub().resolves(['0'])
+      };
+
+      this._sandbox.stub(AuthCache, 'getLoginMessage').resolves('nonce');
+      this._sandbox.stub(AuthCache, 'deleteLoginMessage').resolves();
+      this._sandbox.stub(starknetClient, 'createRpcProvider').resolves(provider);
+      this._sandbox.stub(starknetClient.starknet.typedData, 'getMessageHash').returns('0x123');
+      this._sandbox.stub(starknetClient.starknet.CallData, 'compile').returns(['compiled']);
+
+      let error;
+      try {
+        await AuthService.verifyChallenge({
+          address: this.GLOBALS.TEST_STARKNET_WALLET,
+          signature: '1,2'
+        });
+      } catch (e) {
+        error = e;
+      }
+
+      expect(error).to.be.an('error');
+      expect(error.message).to.equal('Signature invalid.');
     });
   });
 });

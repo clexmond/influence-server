@@ -34,6 +34,20 @@ describe('StarknetBlockCache', function () {
     });
   });
 
+  describe('getCurrentBlockTimestamp', function () {
+    it('should get the current starknet block timestamp', async function () {
+      await BaseMongoCache.cacheInstance.set('CURRENT_STARKNET_BLOCK_TIMESTAMP', 1778144596);
+      expect(await StarknetBlockCache.getCurrentBlockTimestamp()).to.equal(1778144596);
+    });
+  });
+
+  describe('setCurrentBlockTimestamp', function () {
+    it('should set the current starknet block timestamp', async function () {
+      await StarknetBlockCache.setCurrentBlockTimestamp(1778144596);
+      expect(await BaseMongoCache.cacheInstance.get('CURRENT_STARKNET_BLOCK_TIMESTAMP')).to.equal(1778144596);
+    });
+  });
+
   describe('getLastRetrievedBlock', function () {
     it('should get the last retrieved starknet block number', async function () {
       await BaseMongoCache.cacheInstance.set('LAST_RETRIEVED_STARKNET_BLOCK', 42);
@@ -74,12 +88,30 @@ describe('StarknetBlockCache', function () {
       await BaseMongoCache.cacheInstance.set('LAST_RETRIEVED_STARKNET_BLOCK', 11);
       await BaseMongoCache.cacheInstance.set('LAST_AUDITED_FINALIZED_STARKNET_BLOCK', 22);
       await BaseMongoCache.cacheInstance.set('CURRENT_STARKNET_BLOCK_NUMBER', 33);
+      await BaseMongoCache.cacheInstance.set('CURRENT_STARKNET_BLOCK_TIMESTAMP', 44);
+      await BaseMongoCache.cacheInstance.set('LAST_EMITTED_CURRENT_STARKNET_BLOCK_NUMBER', 55);
 
       await StarknetBlockCache.reset();
 
       expect(await BaseMongoCache.cacheInstance.get('LAST_RETRIEVED_STARKNET_BLOCK')).to.equal(undefined);
       expect(await BaseMongoCache.cacheInstance.get('LAST_AUDITED_FINALIZED_STARKNET_BLOCK')).to.equal(undefined);
       expect(await BaseMongoCache.cacheInstance.get('CURRENT_STARKNET_BLOCK_NUMBER')).to.equal(33);
+      expect(await BaseMongoCache.cacheInstance.get('CURRENT_STARKNET_BLOCK_TIMESTAMP')).to.equal(44);
+      expect(await BaseMongoCache.cacheInstance.get('LAST_EMITTED_CURRENT_STARKNET_BLOCK_NUMBER')).to.equal(55);
+    });
+  });
+
+  describe('getLastEmittedCurrentBlockNumber', function () {
+    it('should get the last emitted current starknet block number', async function () {
+      await BaseMongoCache.cacheInstance.set('LAST_EMITTED_CURRENT_STARKNET_BLOCK_NUMBER', 42);
+      expect(await StarknetBlockCache.getLastEmittedCurrentBlockNumber()).to.equal(42);
+    });
+  });
+
+  describe('setLastEmittedCurrentBlockNumber', function () {
+    it('should set the last emitted current starknet block number', async function () {
+      await StarknetBlockCache.setLastEmittedCurrentBlockNumber(42);
+      expect(await BaseMongoCache.cacheInstance.get('LAST_EMITTED_CURRENT_STARKNET_BLOCK_NUMBER')).to.equal(42);
     });
   });
 });

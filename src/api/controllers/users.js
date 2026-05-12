@@ -8,6 +8,25 @@ const { toBoolean } = require('@common/lib/utils');
 const { allowedOrigin } = require('@api/plugins/origin');
 const { ActivityService, ReferralService, UserService } = require('@common/services');
 
+const setCurrentStarknetBlockHeaders = async (ctx) => {
+  const rawBlockNumber = await StarknetBlockCache.getCurrentBlockNumber();
+  const blockNumber = (rawBlockNumber === null || typeof rawBlockNumber === 'undefined')
+    ? Number.NaN
+    : Number(rawBlockNumber);
+  const rawBlockTimestamp = await StarknetBlockCache.getCurrentBlockTimestamp();
+  const blockTimestamp = (rawBlockTimestamp === null || typeof rawBlockTimestamp === 'undefined')
+    ? Number.NaN
+    : Number(rawBlockTimestamp);
+
+  if (Number.isFinite(blockNumber)) {
+    ctx.set('Starknet-Block-Number', String(blockNumber));
+  }
+
+  if (Number.isFinite(blockTimestamp)) {
+    ctx.set('Starknet-Block-Timestamp', String(blockTimestamp));
+  }
+};
+
 // load the user from the decoded jwt address
 const loadUser = async (ctx, next) => {
   const { state: { user: { sub: address } } } = ctx;
@@ -29,6 +48,7 @@ const getUser = async (ctx) => {
   const { state: { userDoc } } = ctx;
 
   const { id, ...user } = userDoc.toJSON();
+  await setCurrentStarknetBlockHeaders(ctx);
   ctx.type = 'application/json';
   ctx.body = user;
 };
@@ -130,7 +150,7 @@ const getActivity = async (ctx) => {
 
   ctx.status = 200;
   ctx.set('Eth-Block-Number', await EthereumBlockCache.getCurrentBlockNumber());
-  ctx.set('Starknet-Block-Number', await StarknetBlockCache.getCurrentBlockNumber());
+  await setCurrentStarknetBlockHeaders(ctx);
   ctx.set('Total-Hits', totalCount);
 
   // Flag hidden docs
@@ -181,7 +201,10 @@ const updateUser = async (ctx) => {
 // Setup routes
 const router = new KoaRouter()
   .use(koaJwt({ secret: appConfig.get('App.jwtSecret') }))
-  .use(cors({ origin: allowedOrigin, exposeHeaders: ['Total-Hits', 'Eth-Block-Number', 'Starknet-Block-Number'] }))
+  .use(cors({
+    origin: allowedOrigin,
+    exposeHeaders: ['Total-Hits', 'Eth-Block-Number', 'Starknet-Block-Number', 'Starknet-Block-Timestamp']
+  }))
   .use(loadUser)
   .use(bodyParser())
   .get('/v2/user', getUser)

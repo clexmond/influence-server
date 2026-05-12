@@ -129,6 +129,47 @@ describe('Starknet Event Retriever', function () {
       expect(retrieveStub.callCount).to.eql(1);
       expect(retrieveStub.getCall(0).calledWithExactly({ fromBlock: 2, toBlock: 2 })).to.eql(true);
     });
+
+    it('should refresh the cached current starknet block data when run against latest', async function () {
+      sandbox.stub(retriever.provider, 'getBlockNumber').resolves(100);
+      sandbox.stub(retriever.provider, 'getBlock').resolves({ blockNumber: 100, timestamp: 1778144596 });
+      sandbox.stub(StarknetBlockCache, 'getCurrentBlockNumber').resolves(99);
+      const setCurrentNumberStub = sandbox.stub(StarknetBlockCache, 'setCurrentBlockNumber').resolves();
+      const setCurrentTimestampStub = sandbox.stub(StarknetBlockCache, 'setCurrentBlockTimestamp').resolves();
+      const retrieveStub = sandbox.stub(retriever, 'retrieveAndProcessRange').resolves(0);
+
+      await retriever.runOnce({ fromBlock: 100, toBlock: 'latest', onlyMisingBlocks: false });
+
+      expect(setCurrentNumberStub.calledOnceWithExactly(100)).to.eql(true);
+      expect(setCurrentTimestampStub.calledOnceWithExactly(1778144596)).to.eql(true);
+      expect(retrieveStub.calledOnceWithExactly({ fromBlock: 100, toBlock: 100 })).to.eql(true);
+    });
+  });
+
+  describe('cacheCurrentBlock', function () {
+    it('should cache the current starknet block number with the block timestamp', async function () {
+      sandbox.stub(retriever.provider, 'getBlock').resolves({ blockNumber: 200, timestamp: 1778144596 });
+      sandbox.stub(StarknetBlockCache, 'getCurrentBlockNumber').resolves(199);
+      const setCurrentNumberStub = sandbox.stub(StarknetBlockCache, 'setCurrentBlockNumber').resolves();
+      const setCurrentTimestampStub = sandbox.stub(StarknetBlockCache, 'setCurrentBlockTimestamp').resolves();
+
+      await retriever.cacheCurrentBlock(200);
+
+      expect(setCurrentNumberStub.calledOnceWithExactly(200)).to.eql(true);
+      expect(setCurrentTimestampStub.calledOnceWithExactly(1778144596)).to.eql(true);
+    });
+
+    it('should clear the cached current starknet block timestamp when the block lookup fails', async function () {
+      sandbox.stub(retriever.provider, 'getBlock').rejects(new Error('rpc unavailable'));
+      sandbox.stub(StarknetBlockCache, 'getCurrentBlockNumber').resolves(199);
+      const setCurrentNumberStub = sandbox.stub(StarknetBlockCache, 'setCurrentBlockNumber').resolves();
+      const setCurrentTimestampStub = sandbox.stub(StarknetBlockCache, 'setCurrentBlockTimestamp').resolves();
+
+      await retriever.cacheCurrentBlock(200);
+
+      expect(setCurrentNumberStub.calledOnceWithExactly(200)).to.eql(true);
+      expect(setCurrentTimestampStub.calledOnceWithExactly(null)).to.eql(true);
+    });
   });
 
   describe('retrieveAndProcessRange', function () {
