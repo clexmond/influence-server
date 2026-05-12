@@ -11,7 +11,7 @@ describe('EventProcessor', function () {
 
   beforeEach(function () {
     sandbox = sinon.createSandbox();
-    processor = new EventProcessor({ runDelay: 5000 });
+    processor = new EventProcessor({ runDelay: 5000, batchSize: 100 });
   });
 
   afterEach(function () {
@@ -78,5 +78,56 @@ describe('EventProcessor', function () {
         expect(emitStub.called).to.equal(false);
       }
     );
+  });
+
+  describe('scheduleNextRun', function () {
+    it('should rerun immediately when the processor consumes a full batch', async function () {
+      const mainStub = sandbox.stub(processor, 'main').resolves('rerun');
+
+      const result = await processor.scheduleNextRun({
+        timerMs: 10,
+        eventsLength: 100
+      });
+
+      expect(result).to.equal('rerun');
+      expect(mainStub.calledOnceWithExactly({ timeStamp: undefined })).to.equal(true);
+    });
+
+    it(
+      'should delay before rerunning when the processor is under the batch limit and under run delay',
+      async function () {
+        const clock = sandbox.useFakeTimers();
+        const mainStub = sandbox.stub(processor, 'main').resolves('rerun');
+        const schedulePromise = processor.scheduleNextRun({
+          timerMs: 10,
+          eventsLength: 99
+        });
+
+        expect(mainStub.called).to.equal(false);
+        await clock.tickAsync(4990);
+
+        const result = await schedulePromise;
+
+        expect(result).to.equal('rerun');
+        expect(mainStub.calledOnceWithExactly({ timeStamp: undefined })).to.equal(true);
+      }
+    );
+  });
+
+  describe('main', function () {
+    it('should fetch non-processed events using the capped batch size', async function () {
+      sandbox.stub(EventService, 'getNonProcessed').resolves([]);
+      const processStub = sandbox.stub(processor, 'process').resolves();
+      const emitStub = sandbox.stub(processor, 'emitCachedStarknetBlockNumberIfCaughtUp').resolves(false);
+      const scheduleStub = sandbox.stub(processor, 'scheduleNextRun').resolves('scheduled');
+
+      const result = await processor.main();
+
+      expect(result).to.equal('scheduled');
+      expect(EventService.getNonProcessed.calledOnceWithExactly({ limit: 100 })).to.equal(true);
+      expect(processStub.calledOnceWithExactly({ events: [] })).to.equal(true);
+      expect(emitStub.calledOnce).to.equal(true);
+      expect(scheduleStub.calledOnce).to.equal(true);
+    });
   });
 });

@@ -7,10 +7,13 @@ const logger = require('@common/lib/logger');
 const eventEmitter = require('@common/lib/sio/emitter');
 const EventConfig = require('./config');
 
+const DEFAULT_BATCH_SIZE = 100;
+
 class EventProcessor {
   constructor(props = {}) {
     if (!props.runDelay) throw new Error('Missing required value for runDelay');
     this.runDelay = props.runDelay;
+    this.batchSize = Number(props.batchSize || DEFAULT_BATCH_SIZE);
   }
 
   async process({ events }) {
@@ -77,10 +80,23 @@ class EventProcessor {
     return this.emitCachedStarknetBlockNumber();
   }
 
+  async scheduleNextRun({ timeStamp, timerMs, eventsLength }) {
+    if (timerMs > this.runDelay || eventsLength >= this.batchSize) {
+      return this.main({ timeStamp });
+    }
+
+    const delayMs = this.runDelay - timerMs;
+    logger.info(`EventProcessor::main, run delay not met, delaying for [${delayMs}ms]...`);
+    await new Promise((resolve) => {
+      delay(resolve, delayMs);
+    });
+    return this.main({ timeStamp });
+  }
+
   async main({ timeStamp } = {}) {
     const timer = new Timer({ label: 'EventProcessor-timer' }).start();
-    const events = (timeStamp) ? await EventService.getFromTimestamp({ limit: 1000, timeStamp })
-      : await EventService.getNonProcessed({ limit: 1000 });
+    const events = (timeStamp) ? await EventService.getFromTimestamp({ limit: this.batchSize, timeStamp })
+      : await EventService.getNonProcessed({ limit: this.batchSize });
     logger.info(`EventProcessor::main, event(s) to process: ${events.length}`);
 
     await this.process({ events });
@@ -88,13 +104,7 @@ class EventProcessor {
       await this.emitCachedStarknetBlockNumberIfCaughtUp();
     }
 
-    // if time elapsed is greater than the run delay, run now, else delay the diff
-    if (timer.ms() > this.runDelay) return this.main();
-    const delayMs = this.runDelay - timer.ms();
-    logger.info(`EventProcessor::main, run delay not met, delaying for [${delayMs}ms]...`);
-    return new Promise(() => {
-      delay(() => this.main(), delayMs);
-    });
+    return this.scheduleNextRun({ timeStamp, timerMs: timer.ms(), eventsLength: events.length });
   }
 }
 
