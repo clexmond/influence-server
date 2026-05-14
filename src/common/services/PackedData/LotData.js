@@ -9,17 +9,24 @@ const { LotDataCache } = require('@common/lib/cache');
 const Logger = require('@common/lib/logger');
 const LotService = require('../Lot');
 
+const LotAttribute = {
+  HAS_SAMPLES:   { value: "hasSamples"  , mask: 0b0000000000000001, shift: 0, compute: async (lotEntity) => { return 0; } },  // Chvx -> found on client side but not here?
+  HAS_CREW:      { value: "hasCrew"     , mask: 0b0000000000000010, shift: 1, compute: async (lotEntity) => { return await PackedLotDataService._locationWithCrew(lotEntity); } },
+  LEASE_STATUS:  { value: "leaseStatus" , mask: 0b0000000000001100, shift: 2, compute: async (lotEntity) => { return await LotService.getLeaseStatus(lotEntity); } },
+  BUILDING_TYPE: { value: "buildingType", mask: 0b0000001111110000, shift: 4, compute: async (lotEntity) => { return await PackedLotDataService._buildingTypeOrStatus(lotEntity); } },
+}
+
+const LotSpecialType = { EMPTY: 0, CONTRUCTION_SITE: 62, LANDED_SHIP: 63}
+
 class PackedLotDataService {
-  static PACKED_WIDTH = 8;
+  static PACKED_WIDTH = 10;  // align with client-side src/lib/api.js getAsteroidLotData()
 
   static hasAgreement(data) {
-    const lotData = (isArray(data)) ? data : data.split('');
-    return lotData[4] === '1' && lotData[5] === '0';
+    return ((data & LotAttribute.LEASE_STATUS.mask) >>> LotAttribute.LEASE_STATUS.shift) === 2;
   }
 
   static isLeaseable(data) {
-    const lotData = (isArray(data)) ? data : data.split('');
-    return lotData[4] === '0' && lotData[5] === '1';
+    return ((data & LotAttribute.LEASE_STATUS.mask) >>> LotAttribute.LEASE_STATUS.shift) === 1;
   }
 
   /**
@@ -44,35 +51,23 @@ class PackedLotDataService {
   }
 
   /**
-   * Gather data from the database and build the packed data for a single log in bit string notation
+   * Gather data from the database and build the packed data for a single lot
    * @param {lotEntity} Lot entity id and label === Entity.IDS.LOT
-   * @returns {string}
+   * @returns {Number}
    */
   static async buildForLot(lot) {
     const lotEntity = Entity.toEntity(lot);
-    const [
-      buildingTypeOrStatus,
-      locationsWithCrew,
-      leaseStatus
-    ] = await Promise.all([
-      this._buildingTypeOrStatus(lotEntity),
-      mongoose.model('LocationComponent').exists({
-        'locations.uuid': lotEntity.uuid,
-        'entity.label': Entity.IDS.CREW
-      }),
-      LotService.getLeaseStatus(lotEntity)
-    ]);
 
-    const value = [
-      (buildingTypeOrStatus || 0).toString(2).padStart(4, 0), // (buildingType)
-      (leaseStatus || 0).toString(2).padStart(2, 0), // (lease status) if lot is leased
-      (locationsWithCrew) ? '1' : '0', // (has crew) check if lot has a crew
-      '0' // currently unused
-    ].join('');
+    const attributes = Object.values(LotAttribute);
 
-    if (value.length !== this.PACKED_WIDTH) throw new Error('Invalid packed value');
+    const computedBits = await Promise.all(
+      attributes.map(async (attribute) => {
+          const value = await attribute.compute.call(this, lotEntity);
+          return (value << attribute.shift) & attribute.mask;
+      })
+    );
 
-    return value;
+    return computedBits.reduce((acc, bits) => acc | bits, 0);
   }
 
   /**
@@ -91,34 +86,34 @@ class PackedLotDataService {
     Logger.debug(`PackedLotDataService::build (${asteroidEntity.id}), lotCount: ${lotCount}`);
 
     // init lot docs with empty data
-    const data = new Array(lotCount).fill('0'.repeat(this.PACKED_WIDTH));
+    const packedData = new PackedData({ size: lotCount, packedWidth: this.PACKED_WIDTH });
     let bufferCount = 0;
     await eachLimit(range(1, lotCount + 1), 100, async (lotIndex) => {
       Logger.verbose(`PackedLotDataService::build: lotIndex: ${lotIndex}/${lotCount}`);
       const lotEntity = Entity.lotFromIndex(asteroidEntity.id, lotIndex);
-      const packedData = await this.buildForLot(lotEntity);
+      const lotData = await this.buildForLot(lotEntity);
 
-      data[lotIndex - 1] = packedData;
-      bufferCount += 1;
+      if (lotData > 0) {
+        packedData.set(lotIndex - 1, lotData);
+        bufferCount += 1;
 
-      if (bufferCount >= BUFFER_SIZE && save) {
-        Logger.debug(`PackedLotDataService::build: bufferCount >= ${BUFFER_SIZE}, updating cache...`);
-        bufferCount = 0;
+        if (bufferCount >= BUFFER_SIZE && save) {
+          Logger.debug(`PackedLotDataService::build: bufferCount >= ${BUFFER_SIZE}, updating cache...`);
+          bufferCount = 0;
 
-        // Incremental cache update
-        const packed = PackedData.fromString(data.join(''), this.PACKED_WIDTH);
-        await this._cacheSet(asteroidEntity, packed);
+          // Incremental cache update
+          await this._cacheSet(asteroidEntity, packedData);
+        }
       }
     });
 
     timer.stop();
     Logger.debug(`PackedLotDataService::build: ${timer.format()}`);
     if (save) {
-      const packed = PackedData.fromString(data.join(''), this.PACKED_WIDTH);
-      await this._cacheSet(asteroidEntity, packed);
+      await this._cacheSet(asteroidEntity, packedData);
     }
 
-    return PackedData.fromString(data.join(''), this.PACKED_WIDTH);
+    return packedData;
   }
 
   /**
@@ -129,8 +124,26 @@ class PackedLotDataService {
     const asteroidEntity = Entity.toEntity(asteroid);
     const lotCount = Asteroid.getSurfaceArea(asteroidEntity.id);
 
-    const data = new Array(lotCount).fill('0'.repeat(this.PACKED_WIDTH));
-    const packed = PackedData.fromString(data.join(''), this.PACKED_WIDTH);
+    const packed = new PackedData({ size: lotCount, packedWidth: this.PACKED_WIDTH });
+    await this._cacheSet(asteroidEntity, packed);
+    return packed;
+  }
+
+  /**
+   * Initialize the packed data for a leasable asteroid, sets all values to leasable for all lots
+   * @param {Object} asteroidEntity
+   */
+  static async initForLeasableAsteroid(asteroid) {
+    const asteroidEntity = Entity.toEntity(asteroid);
+    const lotCount = Asteroid.getSurfaceArea(asteroidEntity.id);
+
+    const packed = new PackedData({ size: lotCount, packedWidth: this.PACKED_WIDTH });
+    
+    const lotIndices = range(1, lotCount + 1);
+    for (const lotIndex of lotIndices) {
+      packed.set(lotIndex - 1, 1 << LotAttribute.LEASE_STATUS.shift);
+    }
+
     await this._cacheSet(asteroidEntity, packed);
     return packed;
   }
@@ -141,7 +154,7 @@ class PackedLotDataService {
    * @param {LotDocument|String} lot
    * @returns {Promise<PackedData>}
    */
-  static async update(lot, packedData) {
+  static async update(lot, packedData, save = true) {
     const lotEntity = Entity.toEntity(lot);
     if (!lotEntity.isLot()) throw new Error('Entity not a lot');
 
@@ -166,110 +179,65 @@ class PackedLotDataService {
     if (currentData === packedLotData) return _packedData;
 
     await _packedData.set(lotIndex - 1, packedLotData);
-    await this._cacheSet(asteroidEntity, _packedData);
+    if (save) await this._cacheSet(asteroidEntity, _packedData);
 
     return _packedData;
   }
 
-  static async updateLotCrewStatus(lot) {
+  static async updateLotAttribute(lot, lotAttribute, forcedValue) {
+	
     const lotEntity = Entity.toEntity(lot);
+    if (!lotEntity.isLot()) throw new Error('Entity not a lot');
+
     const { asteroidId, lotIndex } = lotEntity.unpackLot();
     const asteroidEntity = Entity.Asteroid(asteroidId);
 
-    const crewExists = await mongoose.model('LocationComponent').exists({
-      'locations.uuid': lotEntity.uuid,
-      'entity.label': Entity.IDS.CREW
-    });
+    // get the current cached packed data
+    const packedData = await this.get(asteroidEntity);
 
-    // get all the packed data for the asteroid
-    const packedData = await this._cacheGet(asteroidEntity);
+    // if no data in cache, build it and cache it
+    if (!packedData) throw new Error('Missing packed data, must be built for the specified asteroid first');
 
-    // get the packed data for the lot and convert to array
-    const lotData = packedData.get(lotIndex - 1).split('');
+    const packedIndex = lotIndex - 1;
 
-    lotData.splice(6, 1, (crewExists ? '1' : '0'));
-    packedData.set(lotIndex - 1, lotData.join(''));
+    // get the current packed data for the lot
+    const lotData = packedData.get(packedIndex)
+	
+    // set the correct mask, shift, and value based on attribute; use forceValue if provided
+    const { mask, shift, compute } = lotAttribute;
+    const rawValue = forcedValue !== undefined
+      ? forcedValue
+      : await compute.call(this, lotEntity);
+
+    const shiftedValue = (rawValue << shift) & mask;
+    
+    // clear then set the bits
+    const updatedLotData = (lotData & ~mask) | shiftedValue;
+
+    // no need for update if the data is the same
+    if (lotData === updatedLotData) return packedData;
+    
+    packedData.set(packedIndex, updatedLotData);
+
     await this._cacheSet(asteroidEntity, packedData);
+
     return packedData;
+  }
+
+  static async updateLotCrewStatus(lot) {
+    return await this.updateLotAttribute(lot, LotAttribute.HAS_CREW);
   }
 
   static async updateBuildingTypeForLot(lot) {
-    const lotEntity = Entity.toEntity(lot);
-    const { asteroidId, lotIndex } = lotEntity.unpackLot();
-    const asteroidEntity = Entity.Asteroid(asteroidId);
-
-    // get all the packed data for the asteroid
-    const packedData = await this.get(asteroidEntity);
-
-    // get the packed data for the lot and convert to array
-    const lotData = packedData.get(lotIndex - 1).split('');
-
-    // get the building type for the lot
-    const buildingTypeOrStatus = await this._buildingTypeOrStatus(lotEntity);
-
-    lotData.splice(0, 4, ...buildingTypeOrStatus.toString(2).padStart(4, 0).split(''));
-    packedData.set(lotIndex - 1, lotData.join(''));
-    await this._cacheSet(asteroidEntity, packedData);
+    return await this.updateLotAttribute(lot, LotAttribute.BUILDING_TYPE);
   }
 
   static async updateLotLeaseStatus(lot) {
-    const lotEntity = Entity.toEntity(lot);
-    if (!lotEntity.isLot()) throw new Error('Entity not a lot');
-
-    const { asteroidId, lotIndex } = lotEntity.unpackLot();
-    const asteroidEntity = Entity.Asteroid(asteroidId);
-
-    // get the current cached packed data
-    const packedData = await this.get(asteroidEntity);
-
-    // if no data in cache, build it and cache it
-    if (!packedData) throw new Error('Missing packed data, must be built for the specified asteroid first');
-
-    const packedIndex = lotIndex - 1;
-
-    // get the current packed data for the lot and convert to array
-    const lotData = packedData.get(packedIndex).split('');
-
-    // init the updated lot data with the current data
-    const updatedLotData = [...lotData];
-
-    // get the lease status for the lot
-    const leaseStatus = await LotService.getLeaseStatus(lotEntity);
-
-    // update the lease status bits
-    updatedLotData.splice(4, 2, ...leaseStatus.toString(2).padStart(2, 0).split(''));
-
-    // no need for update if the data is the same
-    if (lotData.join('') === updatedLotData.join('')) return packedData;
-
-    packedData.set(packedIndex, updatedLotData.join(''));
-
-    await this._cacheSet(asteroidEntity, packedData);
-
-    return packedData;
+    return await this.updateLotAttribute(lot, LotAttribute.LEASE_STATUS);
   }
 
   static async updateLotToLeased(lot) {
-    const lotEntity = Entity.toEntity(lot);
-    if (!lotEntity.isLot()) throw new Error('Entity not a lot');
-
-    const { asteroidId, lotIndex } = lotEntity.unpackLot();
-    const asteroidEntity = Entity.Asteroid(asteroidId);
-
-    // get the current cached packed data
-    const packedData = await this.get(asteroidEntity);
-
-    // if no data in cache, build it and cache it
-    if (!packedData) throw new Error('Missing packed data, must be built for the specified asteroid first');
-
-    const packedIndex = lotIndex - 1;
-    const lotData = packedData.get(packedIndex).split('');
-    lotData.splice(4, 2, '1', '0');
-    packedData.set(packedIndex, lotData.join(''));
-
-    await this._cacheSet(asteroidEntity, packedData);
-
-    return packedData;
+    return await this.updateLotAttribute(lot, LotAttribute.LEASE_STATUS, 2);
   }
 
   /**
@@ -313,15 +281,16 @@ class PackedLotDataService {
 
     for (const lotIndex of _lotIndices) {
       const packedIndex = lotIndex - 1;
-      const lotData = packedData.get(packedIndex).split('');
+      const lotData = packedData.get(packedIndex);
 
       // if has a current agreement but force is not true, skip
       if (!this.hasAgreement(lotData) || (this.hasAgreement(lotData) && clearAgreements)) {
-        // update the lease status to 0
-        lotData.splice(4, 2, '0', '1');
+        // update the lease status to 1
+        const { mask, shift } = LotAttribute.LEASE_STATUS;
+        const updatedLotData = (lotData & ~mask) | (1 << shift);
 
         // update the packed data object
-        packedData.set(packedIndex, lotData.join(''));
+        packedData.set(packedIndex, updatedLotData);
       }
     }
 
@@ -365,15 +334,15 @@ class PackedLotDataService {
 
     for (const lotIndex of _lotIndices) {
       const packedIndex = lotIndex - 1;
-      const lotData = packedData.get(packedIndex).split('');
+      const lotData = packedData.get(packedIndex);
 
       // if has a current agreement but force is not true, skip
       if (!this.hasAgreement(lotData) || (this.hasAgreement(lotData) && clearAgreements)) {
-        // update the lease status to 0
-        lotData.splice(4, 2, '0', '0');
+        // update the lease status to 0 (= clear bits)
+        const updatedLotData = lotData & ~ LotAttribute.LEASE_STATUS.mask;
 
         // update the packed data object
-        packedData.set(packedIndex, lotData.join(''));
+        packedData.set(packedIndex, updatedLotData);
       }
     }
 
@@ -385,8 +354,7 @@ class PackedLotDataService {
 
   /* Private */
 
-  static async _buildingTypeOrStatus(lot) {
-    const lotEntity = Entity.toEntity(lot);
+  static async _buildingTypeOrStatus(lotEntity) {
 
     const [buildingLocationDoc, shipLocationDoc] = await Promise.all([
       mongoose.model('LocationComponent').findOne({
@@ -403,20 +371,29 @@ class PackedLotDataService {
 
     if (buildingLocationDoc?.virtuals?.building) {
       const { virtuals: { building } } = buildingLocationDoc.toJSON();
-      // special case, return 14 to indicate that the building is under construction
+      // special case, building is under construction
       const { PLANNED, UNDER_CONSTRUCTION } = Building.CONSTRUCTION_STATUSES;
-      if ([PLANNED, UNDER_CONSTRUCTION].includes(building.status)) return 14;
+      if ([PLANNED, UNDER_CONSTRUCTION].includes(building.status)) return LotSpecialType.CONTRUCTION_SITE;
 
       // return building type if building found on lot
       if (building.status && building.buildingType > 0 && Building.TYPES[building.buildingType]) {
-        return Building.TYPES[building.buildingType].category;
+        return building.buildingType;
       }
     }
 
-    // special case, return 15 to represent a ship on the lot
-    if (shipLocationDoc) return 15;
+    // special case, landed ship
+    if (shipLocationDoc) return LotSpecialType.LANDED_SHIP;
 
     return 0;
+  }
+
+  static async _locationWithCrew(lotEntity) {
+    const exists = await mongoose.model('LocationComponent').exists({
+          'locations.uuid': lotEntity.uuid,
+          'entity.label': Entity.IDS.CREW
+        });
+
+    return exists ? 1 : 0;
   }
 
   /**

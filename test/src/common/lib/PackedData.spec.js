@@ -19,105 +19,149 @@ describe('PackedData', function () {
     });
   });
 
-  describe('toString', function () {
-    it('should return the packedData in a single string', function () {
-      const packedData = new PackedData({ packedData: [1811939328], packedWidth: 2 });
-      expect(packedData.toString()).to.equal('01101100000000000000000000000000');
-    });
-  });
-
   describe('get', function () {
     it('should return the value at the given index', function () {
-      let packedData = new PackedData({ packedData: [1811939328], packedWidth: 2 });
-      expect(packedData.get(0)).to.equal('01');
-      expect(packedData.get(1)).to.equal('10');
-      expect(packedData.get(2)).to.equal('11');
+      let packedData = new PackedData({ packedData: [0b01_10_11_00_01_11_11_11_00_00_00_00_00_00_00_00], packedWidth: 2 });
+      expect(packedData.get(0)).to.equal(0b01);
+      expect(packedData.get(1)).to.equal(0b10);
+      expect(packedData.get(2)).to.equal(0b11);
 
-      packedData = new PackedData({ packedData: [1811939328], packedWidth: 3 });
-      expect(packedData.get(0)).to.equal('011');
-      expect(packedData.get(1)).to.equal('011');
-      expect(packedData.get(2)).to.equal('000');
+      packedData = new PackedData({ packedData: [0b011_011_000_111_111_100_000_000_000_000_00], packedWidth: 3 });
+      expect(packedData.get(0)).to.equal(0b011);
+      expect(packedData.get(1)).to.equal(0b011);
+      expect(packedData.get(2)).to.equal(0b000);
     });
   });
 
   describe('set', function () {
     it('should replace the value at the given index with the specified value (width 2)', function () {
-      const packedData = new PackedData({ packedData: [1811939328], packedWidth: 2 });
-      packedData.set(3, '01');
-      expect(packedData.valueOf()).to.deep.equal([1828716544]);
-      expect(packedData.toString()).to.equal('01101101000000000000000000000000');
-      expect(packedData.get(3)).to.equal('01');
+      const packedData = new PackedData({ packedData: [0b01_10_11_00_01_11_11_11_00_00_00_00_00_00_00_00], packedWidth: 2 });
+      packedData.set(3, 0b01);
+      expect(packedData.valueOf()).to.deep.equal([0b01_10_11_01_01_11_11_11_00_00_00_00_00_00_00_00]);
+      expect(packedData.get(3)).to.equal(0b01);
     });
 
     it('should replace the value at the given index with the specified value (width 8)', function () {
       let packedData;
       packedData = new PackedData({
-        packedData: [538976288, 538976288, 538976288, 538976288, 538976288],
+        packedData: [
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000
+        ],
         packedWidth: 8
       });
 
-      packedData.set(0, '00010000');
-      expect(packedData.valueOf()).to.deep.equal([270540832, 538976288, 538976288, 538976288, 538976288]);
+      packedData.set(0, 0b00010000);
+      expect(packedData.valueOf()).to.deep.equal([
+          0b00010000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000
+        ]);
 
       packedData = new PackedData({
-        packedData: [538976288, 538976288, 538976288, 538976288, 538976288],
+        packedData: [
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000
+        ],
         packedWidth: 8
       });
 
-      packedData.set(1, '00010000');
-      expect(packedData.valueOf()).to.deep.equal([537927712, 538976288, 538976288, 538976288, 538976288]);
+      packedData.set(1, 0b00010000);
+      expect(packedData.valueOf()).to.deep.equal([
+          0b00100000_00010000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000
+        ]);
 
       packedData = new PackedData({
-        packedData: [538976288, 538976288, 538976288, 538976288, 538976288],
+        packedData: [
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000
+        ],
         packedWidth: 8
       });
 
-      packedData.set(2, '00010000');
-      expect(packedData.valueOf()).to.deep.equal([538972192, 538976288, 538976288, 538976288, 538976288]);
+      packedData.set(2, 0b00010000);
+      expect(packedData.valueOf()).to.deep.equal([
+          0b00100000_00100000_00010000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000
+        ]);
 
       packedData = new PackedData({
-        packedData: [538976288, 538976288, 538976288, 538976288, 538976288],
+        packedData: [
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000
+        ],
         packedWidth: 8
       });
-      packedData.set(4, '10000000');
-      expect(packedData.valueOf()).to.deep.equal([538976288, 2149589024, 538976288, 538976288, 538976288]);
+      packedData.set(4, 0b10000000);
+      expect(packedData.valueOf()).to.deep.equal([
+          0b00100000_00100000_00100000_00100000,
+          0b10000000_00100000_00100000_00100000|0, // force signed interpretation
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000
+        ]);
 
       packedData = new PackedData({
-        packedData: [538976288, 538976288, 538976288, 538976288, 538976288],
+        packedData: [
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000
+        ],
         packedWidth: 8
       });
-      packedData.set(7, '10000000');
-      expect(packedData.valueOf()).to.deep.equal([538976288, 538976384, 538976288, 538976288, 538976288]);
+      packedData.set(7, 0b10000000);
+      expect(packedData.valueOf()).to.deep.equal([
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_10000000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000,
+          0b00100000_00100000_00100000_00100000
+        ]);
     });
 
     it('should replace the value at the given index with the specified value (width 10)', function () {
-      let packedData = new PackedData({ packedData: [2153781254, 16777216], packedWidth: 10 });
-      packedData.set(3, '1000000010');
-      expect(packedData.toString()).to.equal('1000000001100000000110000000011000000010000000000000000000000000');
-      expect(packedData.valueOf()).to.deep.equal([2153781254, 33554432]);
+      let packedData = new PackedData({ packedData: [
+        0b1000000001_1000000001_1000000001_10|0, // force signed interpretation
+        0b00000001_0000000000_0000000000_0000
+      ], packedWidth: 10 });
+      packedData.set(3, 0b1000000010);
+      expect(packedData.valueOf()).to.deep.equal([
+        0b1000000001_1000000001_1000000001_10|0, // force signed interpretation
+        0b00000010_0000000000_0000000000_0000
+      ]);
 
-      packedData = new PackedData({ packedData: [2153781254, 16777216], packedWidth: 10 });
-      packedData.set(0, '1000000010');
-      expect(packedData.toString()).to.equal('1000000010100000000110000000011000000001000000000000000000000000');
-      expect(packedData.valueOf()).to.deep.equal([2157975558, 16777216]);
-    });
-  });
-
-  describe('fromString', function () {
-    it('should correclty pack and return an instance of PackedData (width 2)', function () {
-      const packedData = PackedData.fromString('011011', 2);
-      expect(packedData).to.be.an.instanceof(PackedData);
-      expect(packedData.valueOf()).to.deep.equal([1811939328]);
-      expect(packedData.packedWidth).to.equal(2);
-      expect(packedData.toString()).to.equal('01101100000000000000000000000000');
-    });
-
-    it('should correclty pack and return an instance of PackedData (width 10)', function () {
-      const packedData = PackedData.fromString('1000000001100000000110000000011000000001', 10);
-      expect(packedData).to.be.an.instanceof(PackedData);
-      expect(packedData.valueOf()).to.deep.equal([2153781254, 16777216]);
-      expect(packedData.packedWidth).to.equal(10);
-      expect(packedData.toString()).to.equal('1000000001100000000110000000011000000001000000000000000000000000');
+      packedData = new PackedData({ packedData: [
+        0b1000000001_1000000001_1000000001_10|0, // force signed interpretation
+        0b00000001_0000000000_0000000000_0000
+      ], packedWidth: 10 });
+      packedData.set(0, 0b1000000010);
+      expect(packedData.valueOf()).to.deep.equal([
+        0b1000000010_1000000001_1000000001_10|0, // force signed interpretation
+        0b00000001_0000000000_0000000000_0000
+      ]);
     });
   });
 });
