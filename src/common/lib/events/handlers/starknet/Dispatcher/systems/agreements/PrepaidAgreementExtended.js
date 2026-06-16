@@ -1,5 +1,5 @@
 const { Address } = require('@influenceth/sdk');
-const { ActivityService, ComponentService } = require('@common/services');
+const { ActivityService, ComponentService, ElasticSearchService } = require('@common/services');
 const StarknetBaseHandler = require('../../../Handler');
 
 class Handler extends StarknetBaseHandler {
@@ -21,6 +21,7 @@ class Handler extends StarknetBaseHandler {
 
     this.messages.push({ to: `Crew::${callerCrew.id}` });
     this.messages.push({ to: `Crew::${permitted.id}` });
+    await ElasticSearchService.queueEntityForIndexing(target);
 
     // Notify the target's controller
     const targetControlCompDoc = await ComponentService.findOneByEntity('Control', target);

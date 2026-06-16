@@ -1,5 +1,6 @@
-const { Address } = require('@influenceth/sdk');
-const { ActivityService } = require('@common/services');
+const { Address, Permission } = require('@influenceth/sdk');
+const Entity = require('@common/lib/Entity');
+const { ActivityService, ElasticSearchService, PackedLotDataService } = require('@common/services');
 const StarknetBaseHandler = require('../../Handler');
 
 class Handler extends StarknetBaseHandler {
@@ -9,7 +10,7 @@ class Handler extends StarknetBaseHandler {
   };
 
   async processEvent() {
-    const { returnValues: { entity, callerCrew, caller } } = this.eventDoc;
+    const { returnValues: { entity, permission, callerCrew, caller } } = this.eventDoc;
 
     const activityResult = await ActivityService.findOrCreateOne({
       addresses: [caller],
@@ -18,6 +19,11 @@ class Handler extends StarknetBaseHandler {
     });
 
     if (activityResult?.created === 0) return;
+
+    await ElasticSearchService.queueEntityForIndexing(entity);
+    if (permission === Permission.IDS.USE_LOT && Entity.isAsteroid(entity)) {
+      await PackedLotDataService.updateLotsToNonLeaseable({ asteroidEntity: entity });
+    }
 
     this.messages.push({ to: `Crew::${callerCrew.id}` });
   }

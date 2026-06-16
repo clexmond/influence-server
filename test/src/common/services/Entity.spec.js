@@ -90,7 +90,7 @@ describe('EntityService', function () {
         const results = await EntityService.getEntities({ ...Entity.Asteroid(1) });
         expect(results[0]).have.keys([
           'id', 'label', 'uuid', 'entity', 'AsteroidProof', 'AsteroidReward', 'Control', 'Celestial',
-          'ContractPolicy', 'Name', 'Nft', 'Orbit', 'PrepaidMerklePolicy',
+          'ContractPolicy', 'Name', 'Nft', 'Orbit', 'PrepaidAgreementAuctionSet', 'PrepaidMerklePolicy',
           'PrepaidPolicy', 'PublicPolicy'
         ]);
       });
@@ -147,7 +147,7 @@ describe('EntityService', function () {
       it('should load the default component data for an Lot', async function () {
         const results = await EntityService.getEntities({ ...Entity.Lot(1), format: false });
         expect(results[0]).to.have.keys(['uuid', 'id', 'label', 'entity', 'ContractAgreement',
-          'PrepaidAgreement', 'WhitelistAgreement', 'WhitelistAccountAgreement']);
+          'PrepaidAgreementAuction', 'PrepaidAgreement', 'WhitelistAgreement', 'WhitelistAccountAgreement']);
       });
 
       it('should load the default component data for an Ship', async function () {
@@ -165,7 +165,7 @@ describe('EntityService', function () {
         const results = await EntityService.getEntities({ ...Entity.Asteroid(1), format: true });
         expect(results[0]).have.keys([
           'id', 'label', 'uuid', 'AsteroidProof', 'AsteroidReward', 'Control', 'Celestial',
-          'ContractPolicies', 'Name', 'Nft', 'Orbit', 'PrepaidMerklePolicy',
+          'ContractPolicies', 'Name', 'Nft', 'Orbit', 'PrepaidAgreementAuctionSet', 'PrepaidMerklePolicy',
           'PrepaidPolicies', 'PublicPolicies'
         ]);
 
@@ -214,7 +214,7 @@ describe('EntityService', function () {
       it('should format the data correctly for an Lot (format: true)', async function () {
         const results = await EntityService.getEntities({ ...Entity.Lot(1), format: true });
         expect(results[0]).to.have.keys(['uuid', 'id', 'label', 'ContractAgreements',
-          'PrepaidAgreements', 'WhitelistAgreements', 'WhitelistAccountAgreements']);
+          'PrepaidAgreementAuction', 'PrepaidAgreements', 'WhitelistAgreements', 'WhitelistAccountAgreements']);
 
         ['ContractAgreements', 'PrepaidAgreements', 'WhitelistAgreements'].forEach((key) => {
           expect(results[0][key]).to.be.an('array');

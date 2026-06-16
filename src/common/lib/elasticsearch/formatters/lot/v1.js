@@ -1,8 +1,9 @@
 const Entity = require('@common/lib/Entity');
-const { ComponentService, EntityService } = require('@common/services');
+const { ComponentService, EntityService, LotService } = require('@common/services');
 
 const components = [
   'ContractAgreement',
+  'PrepaidAgreementAuction',
   'PrepaidAgreement',
   'WhitelistAgreement',
   'WhitelistAccountAgreement'
@@ -19,6 +20,7 @@ const v1 = async function (indexItemDoc) {
     locations: [asteroidEntity]
   };
   data.meta = {};
+  data.PrepaidAgreementAuction = await LotService.getPrepaidAgreementAuction(entity);
 
   // get the asteroid controller
   const controlComponentDoc = await ComponentService.findOneByEntity('Control', asteroidEntity);

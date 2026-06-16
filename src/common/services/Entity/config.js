@@ -23,6 +23,8 @@ const componentConfig = {
       };
     }
   },
+  PrepaidAgreementAuction: { isArray: false },
+  PrepaidAgreementAuctionSet: { isArray: false },
   PrepaidPolicy: { isArray: true, name: 'PrepaidPolicies' },
   Processor: { isArray: true, name: 'Processors' },
   PublicPolicy: { isArray: true, name: 'PublicPolicies' },
@@ -41,6 +43,7 @@ const config = {
       'Name',
       'Nft',
       'Orbit',
+      'PrepaidAgreementAuctionSet',
       'PrepaidMerklePolicy',
       'PrepaidPolicy',
       'PublicPolicy'
@@ -110,6 +113,7 @@ const config = {
   Lot: {
     components: [
       'ContractAgreement',
+      'PrepaidAgreementAuction',
       'PrepaidAgreement',
       'WhitelistAgreement',
       'WhitelistAccountAgreement'
