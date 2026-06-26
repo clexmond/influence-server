@@ -8,6 +8,7 @@ const components = [
   'Name',
   'Nft',
   'Orbit',
+  'PrepaidAgreementAuctionSet',
   'PrepaidMerklePolicy',
   'PrepaidPolicy',
   'PublicPolicy'

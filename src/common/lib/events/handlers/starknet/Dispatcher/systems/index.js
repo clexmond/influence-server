@@ -58,9 +58,13 @@ const MaterialProcessingStartedV1 = require('./MaterialProcessingStarted/v1');
 const NameChanged = require('./NameChanged');
 const OrderCreated = require('./OrderCreated');
 const PrepaidAgreementAccepted = require('./agreements/PrepaidAgreementAccepted');
+const PrepaidAgreementAuctionCancelled = require('./agreements/PrepaidAgreementAuctionCancelled');
+const PrepaidAgreementAuctionConfigured = require('./agreements/PrepaidAgreementAuctionConfigured');
+const PrepaidAgreementAuctionStarted = require('./agreements/PrepaidAgreementAuctionStarted');
 const PrepaidAgreementCancelled = require('./agreements/PrepaidAgreementCancelled');
 const PrepaidAgreementExtended = require('./agreements/PrepaidAgreementExtended');
 const PrepaidAgreementTransferred = require('./agreements/PrepaidAgreementTransferred');
+const PrepaidMerkleAgreementAccepted = require('./agreements/PrepaidMerkleAgreementAccepted');
 const PrepaidPolicyAssigned = require('./PrepaidPolicyAssigned');
 const PrepaidPolicyRemoved = require('./PrepaidPolicyRemoved');
 const PrepareForLaunchRewardClaimed = require('./PrepareForLaunchRewardClaimed');
@@ -158,9 +162,13 @@ module.exports = {
   NameChanged,
   OrderCreated,
   PrepaidAgreementAccepted,
+  PrepaidAgreementAuctionCancelled,
+  PrepaidAgreementAuctionConfigured,
+  PrepaidAgreementAuctionStarted,
   PrepaidAgreementCancelled,
   PrepaidAgreementExtended,
   PrepaidAgreementTransferred,
+  PrepaidMerkleAgreementAccepted,
   PrepaidPolicyAssigned,
   PrepaidPolicyRemoved,
   PrepareForLaunchRewardClaimed,

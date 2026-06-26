@@ -19,6 +19,7 @@ describe('Lot formatter (v1)', function () {
           label: 4,
           uuid: '0x1000000010004',
           ContractAgreements: [],
+          PrepaidAgreementAuction: null,
           PrepaidAgreements: [],
           WhitelistAgreements: [],
           WhitelistAccountAgreements: [],
