@@ -1,3 +1,5 @@
+/* eslint-disable no-bitwise */
+
 class PackedData {
   /**
    * @param {Object} packedData<Array<Number>>, packedWidth<Number>, size<Number>
@@ -7,19 +9,17 @@ class PackedData {
    */
   constructor({ packedData, packedWidth, size } = {}) {
     if (!Number.isInteger(packedWidth) || packedWidth <= 0 || packedWidth > 32) {
-      throw new Error("Invalid packedWidth");
+      throw new Error('Invalid packedWidth');
     }
 
     if (Array.isArray(packedData)) {
       this.packedData = packedData;
       this.packedWidth = packedWidth;
-    } 
-    else if (Number.isInteger(size) && size > 0) {
-      this.packedData = new Array(Math.ceil(size * packedWidth / 32)).fill(0);
+    } else if (Number.isInteger(size) && size > 0) {
+      this.packedData = new Array(Math.ceil((size * packedWidth) / 32)).fill(0);
       this.packedWidth = packedWidth;
-    } 
-    else {
-      throw new Error("Provide either packedData (array) or size (number)");
+    } else {
+      throw new Error('Provide either packedData (array) or size (number)');
     }
   }
 
@@ -45,8 +45,8 @@ class PackedData {
    * @returns {Number}
    */
   get(index) {
-    const wordIndex = Math.floor(index * this.packedWidth / 32);
-    const startBit = index * this.packedWidth % 32;
+    const wordIndex = Math.floor((index * this.packedWidth) / 32);
+    const startBit = (index * this.packedWidth) % 32;
 
     const current = this.packedData[wordIndex];
     const availableBits = 32 - startBit;
@@ -59,23 +59,21 @@ class PackedData {
     }
 
     // case 2: the value spans two words
-    else {
-      const next = this.packedData[wordIndex + 1];
+    const next = this.packedData[wordIndex + 1];
 
-      const firstPartWidth = availableBits;
-      const secondPartWidth = this.packedWidth - firstPartWidth;
+    const firstPartWidth = availableBits;
+    const secondPartWidth = this.packedWidth - firstPartWidth;
 
-      // lower bits from current word
-      const firstMask = (1 << firstPartWidth) - 1;
-      const firstPart = current & firstMask;
+    // lower bits from current word
+    const firstMask = (1 << firstPartWidth) - 1;
+    const firstPart = current & firstMask;
 
-      // upper bits from next word
-      const secondShift = 32 - secondPartWidth;
-      const secondMask = (1 << secondPartWidth) - 1;
-      const secondPart = (next >>> secondShift) & secondMask;
+    // upper bits from next word
+    const secondShift = 32 - secondPartWidth;
+    const secondMask = (1 << secondPartWidth) - 1;
+    const secondPart = (next >>> secondShift) & secondMask;
 
-      return (firstPart << secondPartWidth) | secondPart;
-    }
+    return (firstPart << secondPartWidth) | secondPart;
   }
 
   /**
@@ -84,8 +82,8 @@ class PackedData {
    * @param {Number} value
    */
   set(index, value) {
-    const wordIndex = Math.floor(index * this.packedWidth / 32);
-    const startBit = index * this.packedWidth % 32;
+    const wordIndex = Math.floor((index * this.packedWidth) / 32);
+    const startBit = (index * this.packedWidth) % 32;
 
     const current = this.packedData[wordIndex];
     const availableBits = 32 - startBit;
@@ -95,28 +93,27 @@ class PackedData {
       const shift = availableBits - this.packedWidth;
       const mask = this.packedWidth === 32 ? 0xFFFFFFFF : ((1 << this.packedWidth) - 1) << shift;
       const shiftedValue = (value << shift) & mask;
-      this.packedData[wordIndex] = (current & (~mask) | shiftedValue);
+      this.packedData[wordIndex] = (current & (~mask)) | shiftedValue;
+      return;
     }
 
     // case 2: the value spans two words
-    else {
-      const next = this.packedData[wordIndex + 1];
+    const next = this.packedData[wordIndex + 1];
 
-      const firstPartWidth = availableBits;
-      const secondPartWidth = this.packedWidth - firstPartWidth;
+    const firstPartWidth = availableBits;
+    const secondPartWidth = this.packedWidth - firstPartWidth;
 
-      // lower bits into current word
-      const firstMask = (1 << firstPartWidth) - 1;
-      const shiftedFirstPart = (value >>> secondPartWidth) & firstMask;
+    // lower bits into current word
+    const firstMask = (1 << firstPartWidth) - 1;
+    const shiftedFirstPart = (value >>> secondPartWidth) & firstMask;
 
-      // upper bits into next word
-      const secondPartShift = 32 - secondPartWidth;
-      const secondMask = ((1 << secondPartWidth) - 1) << secondPartShift;
-      const shiftedSecondPart = (value << secondPartShift) & secondMask;
+    // upper bits into next word
+    const secondPartShift = 32 - secondPartWidth;
+    const secondMask = ((1 << secondPartWidth) - 1) << secondPartShift;
+    const shiftedSecondPart = (value << secondPartShift) & secondMask;
 
-      this.packedData[wordIndex] = (current & (~firstMask) | shiftedFirstPart);
-      this.packedData[wordIndex + 1] = (next & (~secondMask) | shiftedSecondPart);
-    }
+    this.packedData[wordIndex] = (current & (~firstMask)) | shiftedFirstPart;
+    this.packedData[wordIndex + 1] = (next & (~secondMask)) | shiftedSecondPart;
   }
 }
 

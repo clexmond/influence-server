@@ -1,6 +1,8 @@
 const { expect } = require('chai');
 const mongoose = require('mongoose');
-const Handler = require('@common/lib/events/handlers/starknet/Dispatcher/systems/agreements/PrepaidAgreementAuctionStarted');
+const Handler = require(
+  '@common/lib/events/handlers/starknet/Dispatcher/systems/agreements/PrepaidAgreementAuctionStarted'
+);
 
 describe('PrepaidAgreementAuctionStarted Handler', function () {
   let event;
