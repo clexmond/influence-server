@@ -3,7 +3,7 @@
 ############################
 # Runtime image
 ############################
-FROM node:18-slim AS runtime
+FROM node:22-slim AS runtime
 
 ARG NODE_ENV=production
 ENV NODE_ENV=$NODE_ENV
@@ -35,7 +35,7 @@ CMD ["npm", "run", "start"]
 # Unit test image
 ############################
 # Debian 11 (bullseye) max for mongo 6
-FROM node:18-bullseye-slim AS unittest
+FROM node:22-bullseye-slim AS unittest
 
 WORKDIR /app
 
