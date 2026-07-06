@@ -72,12 +72,13 @@
       }
     }
   },
-  "NftCardBuilder": {
-    "runDelay": "NFT_CARD_BUILDER_RUN_DELAY"
-  },
   "OpenSea": {
     "uri": "OPEN_SEA_API",
     "key": "OPEN_SEA_API_KEY"
+  },
+  "Element": {
+    "uri": "ELEMENT_API",
+    "chain": "ELEMENT_CHAIN"
   },
   "Redis": {
     "uri": "REDIS_URL"

@@ -89,6 +89,10 @@
     "uri": "https://api.opensea.io/api/v2",
     "chain": "ethereum"
   },
+  "Element": {
+    "uri": "https://api.element.market/openapi/v1",
+    "chain": "starknet"
+  },
   "SendGrid": {
     "templates": {
       "notification": ""
@@ -98,8 +102,5 @@
     "chainSlug": "SN_MAIN",
     "chainId": "0x534e5f4d41494e",
     "originBlock": 218425
-  },
-  "Unframed": {
-    "uri": "https://cloud.argent-api.com/v1/pandora/starknet/mainnet/nft"
   }
 }

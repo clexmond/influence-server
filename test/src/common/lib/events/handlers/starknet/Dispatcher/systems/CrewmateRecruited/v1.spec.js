@@ -1,6 +1,6 @@
 const { expect } = require('chai');
 const mongoose = require('mongoose');
-const { OpenSea, Unframed } = require('@common/lib/marketplaces');
+const { OpenSea } = require('@common/lib/marketplaces');
 const Entity = require('@common/lib/Entity');
 const { PackedLotDataService } = require('@common/services');
 const Handler = require('@common/lib/events/handlers/starknet/Dispatcher/systems/CrewmateRecruited/v1');
@@ -79,13 +79,11 @@ describe('CrewmateRecruited (v1) Handler', function () {
       expect(handler.messages._messages).to.deep.equal([{ to: 'Crew::1' }]);
     });
 
-    it('should update the marketplace(s)', async function () {
-      const openSeaStub = this._sandbox.stub(OpenSea, 'updateAsteroidAsset').resolves();
-      const unframedStub = this._sandbox.stub(Unframed, 'updateAsteroidAsset').resolves();
+    it('should update OpenSea', async function () {
+      const openSeaStub = this._sandbox.stub(OpenSea, 'updateCrewmateAsset').resolves();
       await (new Handler(event)).processEvent();
 
       expect(openSeaStub.calledOnce).to.equal(true);
-      expect(unframedStub.calledOnce).to.equal(true);
     });
 
     it('should update the packed lot data for the crew status', async function () {

@@ -1,35 +1,19 @@
 const OpenSea = require('./OpenSea');
-const Unframed = require('./Unframed');
+const Element = require('./Element');
 
 const updateAsteroidAsset = async (props) => {
-  const results = await Promise.allSettled([
-    OpenSea.updateAsteroidAsset(props),
-    Unframed.updateAsteroidAsset(props)
-  ]);
-  const errors = results.reduce((acc, result) => {
-    if (result.status === 'rejected') acc.push(result.reason);
-    return acc;
-  }, []);
-
-  if (errors.length) throw new Error(errors);
+  await OpenSea.updateAsteroidAsset(props);
+  if (Element.isEnabled()) await Element.updateAsteroidAsset(props);
 };
 
 const updateCrewmateAsset = async (props) => {
-  const results = await Promise.allSettled([
-    OpenSea.updateAsteroidAsset(props),
-    Unframed.updateAsteroidAsset(props)
-  ]);
-  const errors = results.reduce((acc, result) => {
-    if (result.status === 'rejected') acc.push(result.reason);
-    return acc;
-  }, []);
-
-  if (errors.length) throw new Error(errors);
+  await OpenSea.updateCrewmateAsset(props);
+  if (Element.isEnabled()) await Element.updateCrewmateAsset(props);
 };
 
 module.exports = {
+  Element,
   OpenSea,
-  Unframed,
   updateAsteroidAsset,
   updateCrewmateAsset
 };

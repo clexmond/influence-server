@@ -102,9 +102,6 @@
       }
     }
   },
-  "NftCardBuilder": {
-    "runDelay": 5000
-  },
   "Starknet": {
     "originBlock": 1
   }

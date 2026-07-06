@@ -12,7 +12,6 @@
     "eventAuditor": "node ./src/workers/eventAuditor.js",
     "eventProcessor": "node ./src/workers/eventProcessor.js",
     "elasticIndexer": "node ./src/workers/elasticsearch.js",
-    "nftCardBuilder": "node ./src/workers/nftCardBuilder.js",
     "exportStarknetVotes": "node ./bin/exportStarknetVotingSnapshot.js",
     "lint": "./node_modules/.bin/eslint ./src ./test",
     "start": "node ./src/api/server.js",

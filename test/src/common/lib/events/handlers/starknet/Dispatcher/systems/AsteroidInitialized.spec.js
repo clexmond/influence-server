@@ -1,6 +1,6 @@
 const { expect } = require('chai');
 const mongoose = require('mongoose');
-const { OpenSea, Unframed } = require('@common/lib/marketplaces');
+const { OpenSea } = require('@common/lib/marketplaces');
 const Entity = require('@common/lib/Entity');
 const Handler = require('@common/lib/events/handlers/starknet/Dispatcher/systems/AsteroidInitialized');
 const { ComponentService } = require('@common/services');
@@ -39,13 +39,11 @@ describe('AsteroidInitialized Handler', function () {
       expect(doc.proof).to.be.eql([]);
     });
 
-    it('should update the marketplace(s)', async function () {
+    it('should update OpenSea', async function () {
       const openSeaStub = this._sandbox.stub(OpenSea, 'updateAsteroidAsset').resolves();
-      const unframedStub = this._sandbox.stub(Unframed, 'updateAsteroidAsset').resolves();
       await (new Handler(event)).processEvent();
 
       expect(openSeaStub.calledOnce).to.equal(true);
-      expect(unframedStub.calledOnce).to.equal(true);
     });
   });
 
