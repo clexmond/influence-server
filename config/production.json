@@ -1,18 +1,6 @@
 {
-  "Aws": {
-    "cloudfront": {
-      "distrbutionId": "AWS_CLOUDFRONT_DISRIBUTION_ID",
-      "imageHandlerDistributionId": "AWS_CLOUDFRONT_IMAGE_HANDLER_DISRIBUTION_ID"
-    }
-  },
   "Argent": {
     "uri": ""
-  },
-  "Cdn": {
-    "awsBucket": "",
-    "cloudfrontUrl": "",
-    "enabled": 1,
-    "imageHandlerUrl": ""
   },
   "Contracts": {
     "ethereum": {

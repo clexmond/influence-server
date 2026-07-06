@@ -1,20 +1,23 @@
 const { expect } = require('chai');
-const mongoose = require('mongoose');
 const { AsteroidService } = require('@common/services');
-const AsteroidCardGenerator = require('@common/lib/cardGenerators/asteroid');
 
 describe('AsteroidService', function () {
-  afterEach(function () {
-    return this.utils.resetCollections(['Entity']);
-  });
+  describe('getStaticCardFilename', function () {
+    it('should select an asteroid card by spectral type and size', function () {
+      const asteroidDoc = {
+        Celestial: {
+          abundances: '0x7f0a4bd0c8141280000000001f3',
+          bonuses: 0,
+          celestialType: 1,
+          mass: 1329730329406897600000000000,
+          purchaseOrder: 1,
+          radius: 375.1419399997685,
+          scanFinishTime: 0,
+          scanStatus: 4
+        }
+      };
 
-  describe('generateCard', function () {
-    it('should call card generator generateCard', async function () {
-      const stub = this._sandbox.stub(AsteroidCardGenerator, 'generateCard').resolves();
-      await mongoose.model('Entity').create({ id: 1, label: 3 });
-      const asteroidDoc = { id: 1 };
-      await AsteroidService.generateCard({ asteroidDoc });
-      expect(stub.calledWith({ asteroidDoc })).to.eql(true);
+      expect(AsteroidService.getStaticCardFilename(asteroidDoc)).to.equal('asteroid-c-huge.png');
     });
   });
 });

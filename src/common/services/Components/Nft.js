@@ -2,7 +2,6 @@ const mongoose = require('mongoose');
 const { isNil } = require('lodash');
 const { Address } = require('@influenceth/sdk');
 const Entity = require('@common/lib/Entity');
-const NftImage = require('@common/lib/NftImage');
 const CrewService = require('@common/services/Crew');
 const logger = require('@common/lib/logger');
 
@@ -48,10 +47,7 @@ class NftComponentService {
   static async updateCards({ buildLimit = 1 } = {}) {
     const flushBuffer = async (buffer) => {
       const results = await Promise.allSettled(buffer.map(async (nftCompDoc) => {
-        logger.verbose(`updating card for entity: ${nftCompDoc.entity}...`);
-
-        const nftImage = new NftImage(nftCompDoc.entity);
-        await nftImage.buildAndUpdate();
+        logger.verbose(`clearing static card update flag for entity: ${nftCompDoc.entity}...`);
 
         // reset the updateImage flag
         await mongoose.model('NftComponent').updateOne({ _id: nftCompDoc._id }, { updateImage: false });

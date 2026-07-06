@@ -32,4 +32,28 @@ describe('CrewmateService', function () {
       expect(result.length).to.equal(3);
     });
   });
+
+  describe('getStaticCardFilename', function () {
+    it('should select a collection and class card for standard crewmates', function () {
+      const filename = CrewmateService.getStaticCardFilename({
+        Crewmate: { coll: 2, class: 2 }
+      });
+
+      expect(filename).to.equal('arvad-citizen-engineer.png');
+    });
+
+    it('should select the recruit card for uncreated crewmates', function () {
+      const filename = CrewmateService.getStaticCardFilename({});
+
+      expect(filename).to.equal('adalian-recruit.png');
+    });
+
+    it('should select a title-specific card for Arvad Leadership crewmates', function () {
+      const filename = CrewmateService.getStaticCardFilename({
+        Crewmate: { coll: 3, title: 60 }
+      });
+
+      expect(filename).to.equal('arvad-leadership-chief-technology-officer.png');
+    });
+  });
 });
