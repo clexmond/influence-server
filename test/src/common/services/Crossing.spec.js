@@ -1,10 +1,59 @@
 const { expect } = require('chai');
 const mongoose = require('mongoose');
+const { BRIDGING_STATES } = require('@common/constants');
 const CrossingService = require('@common/services/Crossing');
 
 describe('CrossingService', function () {
   afterEach(function () {
     return this.utils.resetCollections(['Crossing']);
+  });
+
+  describe('find', function () {
+    beforeEach(async function () {
+      await mongoose.model('Crossing').create([
+        {
+          assetIds: [1],
+          assetType: 'Asteroid',
+          destination: 'ETHEREUM',
+          origin: 'STARKNET',
+          status: BRIDGING_STATES.PROCESSING
+        },
+        {
+          assetIds: [2],
+          assetType: 'Crew',
+          destination: 'STARKNET',
+          origin: 'ETHEREUM',
+          status: BRIDGING_STATES.COMPLETE
+        },
+        {
+          assetIds: [3],
+          assetType: 'Ship',
+          destination: 'STARKNET',
+          origin: 'ETHEREUM',
+          status: BRIDGING_STATES.PROCESSING
+        }
+      ]);
+    });
+
+    it('should filter by assetTypes string', async function () {
+      const crossings = await CrossingService.find({ assetTypes: 'Asteroid' });
+
+      expect(crossings).to.have.lengthOf(1);
+      expect(crossings[0].assetType).to.equal('Asteroid');
+    });
+
+    it('should filter by assetTypes array', async function () {
+      const crossings = await CrossingService.find({ assetTypes: ['Asteroid', 'Ship'] });
+
+      expect(crossings.map((crossing) => crossing.assetType)).to.have.members(['Asteroid', 'Ship']);
+    });
+
+    it('should filter by status string', async function () {
+      const crossings = await CrossingService.find({ status: BRIDGING_STATES.COMPLETE });
+
+      expect(crossings).to.have.lengthOf(1);
+      expect(crossings[0].status).to.equal(BRIDGING_STATES.COMPLETE);
+    });
   });
 
   describe('removeAsteroidCrossing', function () {

@@ -3,6 +3,20 @@ const { castArray } = require('lodash');
 const { Address } = require('@influenceth/sdk');
 const { BRIDGING_STATES, CHAINS } = require('@common/constants');
 
+const ASSET_TYPES = ['Asteroid', 'Crew', 'Crewmate', 'Ship'];
+const ASSET_TYPES_BY_UPPERCASE = ASSET_TYPES.reduce((memo, assetType) => ({
+  ...memo,
+  [assetType.toUpperCase()]: assetType
+}), {});
+
+const parseFilterValues = (value) => (
+  Array.isArray(value) ? value : String(value).split(',')
+).map((s) => String(s).trim()).filter(Boolean);
+
+const normalizeAssetType = (assetType) => (
+  ASSET_TYPES_BY_UPPERCASE[assetType.toUpperCase()] || assetType
+);
+
 class CrossingService {
   static find({ assetIds, assetTypes, destination, fromAddress, origin, status, toAddress } = {}) {
     const filter = { status: { $in: Object.values(BRIDGING_STATES) } };
@@ -15,16 +29,12 @@ class CrossingService {
       }
     }
     if (assetTypes) {
-      if (Array.isArray(assetTypes)) {
-        filter.assetType = { $in: assetTypes.map((s) => s.trim().toUpperCase()) };
-      } else {
-        filter.assetType = { $in: String(status).split(',').map((s) => s.trim().toUpperCase()) };
-      }
+      filter.assetType = { $in: parseFilterValues(assetTypes).map(normalizeAssetType) };
     }
     if (destination) filter.destination = destination.toUpperCase();
     if (fromAddress) filter.fromAddress = Address.toStandard(fromAddress);
     if (origin) filter.origin = origin.toUpperCase();
-    if (status) filter.status = { $ink: String(status).split(',').map((s) => s.trim().toUpperCase()) };
+    if (status) filter.status = { $in: parseFilterValues(status).map((s) => s.toUpperCase()) };
     if (toAddress) filter.toAddress = Address.toStandard(toAddress);
 
     return mongoose.model('Crossing').find(filter).lean();
