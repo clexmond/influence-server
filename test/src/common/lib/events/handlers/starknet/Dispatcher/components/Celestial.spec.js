@@ -1,22 +1,18 @@
 const { expect } = require('chai');
 const mongoose = require('mongoose');
-const { OpenSea, Unframed } = require('@common/lib/marketplaces');
-const { ElasticSearchService, NftComponentService } = require('@common/services');
+const { OpenSea } = require('@common/lib/marketplaces');
+const { ElasticSearchService } = require('@common/services');
 const Handler = require('@common/lib/events/handlers/starknet/Dispatcher/components/Celestial');
 
 describe('ComponentUpdated: Celestial Handler', function () {
   let event;
   const stubs = {
     OpenSea: null,
-    Unframed: null,
-    flagForCardUpdate: null,
     queueEntityForIndexing: null
   };
 
   before(function () {
     stubs.OpenSea = this._sandbox.stub(OpenSea, 'updateAsteroidAsset').resolves();
-    stubs.Unframed = this._sandbox.stub(Unframed, 'updateAsteroidAsset').resolves();
-    stubs.flagForCardUpdate = this._sandbox.stub(NftComponentService, 'flagForCardUpdate').resolves();
     stubs.queueEntityForIndexing = this._sandbox.stub(ElasticSearchService, 'queueEntityForIndexing').resolves();
     event = mongoose.model('Starknet')({
       event: 'ComponentUpdated_Celestial',
@@ -60,20 +56,14 @@ describe('ComponentUpdated: Celestial Handler', function () {
       expect(docs).to.have.lengthOf(1);
     });
 
-    it('should flag the NftComponent for card update', async function () {
-      await (new Handler(event)).processEvent();
-      expect(stubs.flagForCardUpdate.calledOnce).to.equal(true);
-    });
-
     it('queue the entity for indexing', async function () {
       await (new Handler(event)).processEvent();
       expect(stubs.queueEntityForIndexing.calledOnce).to.equal(true);
     });
 
-    it('should attempt to update the marketplace(s)', async function () {
+    it('should attempt to update OpenSea', async function () {
       await (new Handler(event)).processEvent();
       expect(stubs.OpenSea.calledOnce).to.equal(true);
-      expect(stubs.Unframed.calledOnce).to.equal(true);
     });
   });
 

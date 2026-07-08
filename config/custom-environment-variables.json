@@ -13,14 +13,6 @@
   "Argent": {
     "apiKey": "ARGENT_API_KEY"
   },
-  "Aws": {
-    "accessKey": "AWS_ACCESS_KEY",
-    "cloudfront": {
-      "distrbutionId": "AWS_CLOUDFRONT_DISRIBUTION_ID",
-      "imageHandlerDistributionId": "AWS_CLOUDFRONT_IMAGE_HANDLER_DISRIBUTION_ID"
-    },
-    "secretAccessKey": "AWS_SECRET_ACCESS_KEY"
-  },
   "Elasticsearch": {
     "uri": "ELASTICSEARCH_URL",
     "indexer": {
@@ -80,12 +72,13 @@
       }
     }
   },
-  "NftCardBuilder": {
-    "runDelay": "NFT_CARD_BUILDER_RUN_DELAY"
-  },
   "OpenSea": {
     "uri": "OPEN_SEA_API",
     "key": "OPEN_SEA_API_KEY"
+  },
+  "Element": {
+    "uri": "ELEMENT_API",
+    "chain": "ELEMENT_CHAIN"
   },
   "Redis": {
     "uri": "REDIS_URL"

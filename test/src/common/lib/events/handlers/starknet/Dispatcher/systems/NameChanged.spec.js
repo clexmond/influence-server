@@ -1,6 +1,6 @@
 const { expect } = require('chai');
 const mongoose = require('mongoose');
-const { OpenSea, Unframed } = require('@common/lib/marketplaces');
+const { OpenSea } = require('@common/lib/marketplaces');
 const Handler = require('@common/lib/events/handlers/starknet/Dispatcher/systems/NameChanged');
 
 describe('Dispacher::NameChanged Handler', function () {
@@ -35,7 +35,6 @@ describe('Dispacher::NameChanged Handler', function () {
   describe('processEvent', function () {
     it('should create an Activity Item correctly', async function () {
       const openSeaStub = this._sandbox.stub(OpenSea, 'updateAsteroidAsset').resolves();
-      const unframedStub = this._sandbox.stub(Unframed, 'updateAsteroidAsset').resolves();
       const handler = new Handler(event);
 
       await handler.processEvent();
@@ -44,16 +43,13 @@ describe('Dispacher::NameChanged Handler', function () {
       expect(handler.messages._messages).to.have.lengthOf(1);
       expect(handler.messages._messages).to.deep.equal([{ to: 'Crew::1' }]);
       expect(openSeaStub.calledOnce).to.equal(true);
-      expect(unframedStub.calledOnce).to.equal(true);
     });
 
-    it('should update the marketplace(s)', async function () {
+    it('should update OpenSea', async function () {
       const openSeaStub = this._sandbox.stub(OpenSea, 'updateAsteroidAsset').resolves();
-      const unframedStub = this._sandbox.stub(Unframed, 'updateAsteroidAsset').resolves();
       await (new Handler(event)).processEvent();
 
       expect(openSeaStub.calledOnce).to.equal(true);
-      expect(unframedStub.calledOnce).to.equal(true);
     });
   });
 

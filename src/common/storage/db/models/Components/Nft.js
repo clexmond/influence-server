@@ -24,11 +24,7 @@ const schema = new Schema([
       ethereum: { type: String, set: (address) => Address.toStandard(address, 'ethereum') },
       starknet: { type: String, set: (address) => Address.toStandard(address, 'starknet') }
     },
-    price: { type: Number },
-    updateImage: {
-      type: Boolean,
-      default: false
-    }
+    price: { type: Number }
   }
 ], {
   collection: 'Component_Nft',
@@ -51,7 +47,6 @@ schema.virtual('chain').get(function () {
 
 schema
   .plugin(uniquePathPlugin, ['entity.uuid'])
-  .index({ updateImage: 1 })
   .index({ 'owners.starknet': 1, 'entity.label': 1 })
   .index({ 'entity.uuid': 1 }, { unique: true });
 

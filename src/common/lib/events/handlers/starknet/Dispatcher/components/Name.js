@@ -1,5 +1,5 @@
 const { shortString } = require('starknet');
-const { ComponentService, ElasticSearchService, NftComponentService } = require('@common/services');
+const { ComponentService, ElasticSearchService } = require('@common/services');
 const BaseHandler = require('../../Handler');
 
 class Handler extends BaseHandler {
@@ -34,7 +34,6 @@ class Handler extends BaseHandler {
     if (!updated) return;
 
     await Promise.all([
-      NftComponentService.flagForCardUpdate(entity, true),
       ElasticSearchService.queueEntityForIndexing(entity),
       ElasticSearchService.queueRelatedEntitiesForIndexing(entity)
     ]);

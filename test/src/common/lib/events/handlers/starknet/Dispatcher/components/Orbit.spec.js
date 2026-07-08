@@ -1,17 +1,15 @@
 const { expect } = require('chai');
 const mongoose = require('mongoose');
-const { ElasticSearchService, NftComponentService } = require('@common/services');
+const { ElasticSearchService } = require('@common/services');
 const Handler = require('@common/lib/events/handlers/starknet/Dispatcher/components/Orbit');
 
 describe('ComponentUpdated: Orbit Handler', function () {
   let event;
   const stubs = {
-    flagForCardUpdate: null,
     queueEntityForIndexing: null
   };
 
   before(function () {
-    stubs.flagForCardUpdate = this._sandbox.stub(NftComponentService, 'flagForCardUpdate').resolves();
     stubs.queueEntityForIndexing = this._sandbox.stub(ElasticSearchService, 'queueEntityForIndexing').resolves();
     event = mongoose.model('Starknet')({
       event: 'ComponentUpdated_Orbit',

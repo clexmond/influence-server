@@ -2,7 +2,6 @@ const { expect } = require('chai');
 const mongoose = require('mongoose');
 const Entity = require('@common/lib/Entity');
 const { CrewService } = require('@common/services');
-const CardGenerator = require('@common/lib/cardGenerators/crew');
 
 describe('CrewService', function () {
   beforeEach(async function () {
@@ -34,23 +33,11 @@ describe('CrewService', function () {
     });
   });
 
-  describe('generateCard', function () {
-    it('should call card generator generateCard', async function () {
-      await mongoose.model('Entity').updateOne({ id: 1, label: 1 }, { upsert: true });
-      let stub = this._sandbox.stub(CardGenerator, 'generateCard').resolves();
-      let crewDoc = { id: 1 };
-      let crewmateDoc = { id: 1 };
-      await CrewService.generateCard({ crewmateDoc, crewDoc });
-      expect(stub.calledWith({ crewmate: crewmateDoc, crew: crewDoc })).to.eql(true);
-      this._sandbox.restore();
-
-      stub = this._sandbox.stub(CardGenerator, 'generateCard').resolves();
-      const crewEntity = Entity.Crew(1);
-      const crewmateEntity = Entity.Crewmate(1);
-      crewmateDoc = { id: 1, label: 2, uuid: '0x10002', Crewmate: null, Name: null };
-      crewDoc = { id: 1, label: 1, uuid: '0x10001', Crew: { roster: [1, 2, 3] }, Name: null };
-      await CrewService.generateCard({ crewEntity, crewmateEntity });
-      expect(stub.calledWith({ crewmate: crewmateDoc, crew: crewDoc })).to.eql(true);
+  describe('getCard', function () {
+    it('should return the static crew card', async function () {
+      const card = await CrewService.getCard({ fileType: 'png' });
+      expect(Buffer.isBuffer(card)).to.equal(true);
+      expect(card.subarray(1, 4).toString()).to.equal('PNG');
     });
   });
 

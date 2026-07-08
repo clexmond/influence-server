@@ -7,9 +7,6 @@
   "Argent": {
     "relayerPath": "/v1/relayer/execute"
   },
-  "Aws": {
-    "region": "us-east-2"
-  },
   "Contracts": {
     "starknet": {
       "udc": "0x041a78e741e5af2fec34b695679bc6891742439f7afb8484ecd7766661ad02bf"
@@ -104,9 +101,6 @@
         "name": "Influence Notifications"
       }
     }
-  },
-  "NftCardBuilder": {
-    "runDelay": 5000
   },
   "Starknet": {
     "originBlock": 1

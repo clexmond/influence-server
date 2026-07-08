@@ -1,6 +1,6 @@
 const { pullAt, range } = require('lodash');
 
-const { ComponentService, ElasticSearchService, NftComponentService } = require('@common/services');
+const { ComponentService, ElasticSearchService } = require('@common/services');
 const { updateCrewmateAsset } = require('@common/lib/marketplaces');
 const logger = require('@common/lib/logger');
 const BaseHandler = require('../../Handler');
@@ -26,7 +26,6 @@ class Handler extends BaseHandler {
     if (!updated) return;
     await ElasticSearchService.queueEntityForIndexing(entity);
 
-    // Flag the entity for card update if appearance, class, coll or title changed
     if (
       !oldDoc
       || newDoc.appearance !== oldDoc.appearance
@@ -34,8 +33,6 @@ class Handler extends BaseHandler {
       || newDoc.coll !== oldDoc.coll
       || newDoc.title !== oldDoc.title
     ) {
-      await NftComponentService.flagForCardUpdate(entity, true);
-
       try {
         await updateCrewmateAsset({ id: entity.id });
       } catch (error) {

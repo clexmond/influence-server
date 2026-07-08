@@ -1,6 +1,6 @@
 const appConfig = require('config');
 const { reduce } = require('lodash');
-const { Address: { toStandard }, ethereumContracts: abis } = require('@influenceth/sdk');
+const { Address, Address: { toStandard }, ethereumContracts: abis } = require('@influenceth/sdk');
 const logger = require('@common/lib/logger');
 const web3 = require('@common/lib/web3');
 const { FMT_BYTES, FMT_NUMBER } = require('web3');
@@ -22,6 +22,7 @@ const CONTRACT_SHIP = appConfig.get('Contracts.ethereum.ship');
 const CONTRACT_SHIP_BRIDGE = appConfig.get('Contracts.ethereum.shipBridge');
 const CONTRACT_STARKNET_CORE = appConfig.get('Contracts.ethereum.starknetCore');
 const CONTRACT_SWAY_GOVERNOR = appConfig.get('Contracts.ethereum.swayGovernor');
+const ETHEREUM_ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
 
 const ADDRESS_NAME_MAP = {
   [CONTRACT_ARVAD_CREW_SALE]: {
@@ -225,9 +226,17 @@ class EthereumEventsConfig {
     return filterKeys.every((key) => {
       const expected = eventFilter[key];
       const actual = event.returnValues?.[key];
-      if (Array.isArray(expected)) return expected.map((value) => value.toString()).includes(actual?.toString());
-      return actual?.toString() === expected?.toString();
+      if (Array.isArray(expected)) return expected.some((value) => this.filterValueMatches(actual, value));
+      return this.filterValueMatches(actual, expected);
     });
+  }
+
+  static filterValueMatches(actual, expected) {
+    const actualString = actual?.toString();
+    const expectedString = expected?.toString();
+    if (actualString === expectedString) return true;
+    if (!ETHEREUM_ADDRESS_REGEX.test(actualString) || !ETHEREUM_ADDRESS_REGEX.test(expectedString)) return false;
+    return Address.areEqual(actualString, expectedString, 'ethereum', 'ethereum');
   }
 
   static getTrackedAddresses() {

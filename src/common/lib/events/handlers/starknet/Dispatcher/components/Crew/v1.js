@@ -1,6 +1,6 @@
 const { pullAt, range } = require('lodash');
 const { Address } = require('@influenceth/sdk');
-const { CrewReadyNotificationService, NftComponentService } = require('@common/services');
+const { CrewReadyNotificationService } = require('@common/services');
 
 const { ComponentService, ElasticSearchService } = require('@common/services');
 const BaseHandler = require('../../../Handler');
@@ -31,7 +31,7 @@ class Handler extends BaseHandler {
       data.lastReadyAt = crewComponentDoc.readyAt;
     }
 
-    const { doc: newDoc, oldDoc, updated } = await ComponentService.updateOrCreateFromEvent({
+    const { updated } = await ComponentService.updateOrCreateFromEvent({
       component: 'Crew',
       event: this.eventDoc,
       data,
@@ -45,10 +45,6 @@ class Handler extends BaseHandler {
 
     // queue the entity for indexing
     await ElasticSearchService.queueEntityForIndexing(entity);
-
-    if (!oldDoc || JSON.stringify(newDoc.roster || []) !== JSON.stringify(oldDoc.roster || [])) {
-      await NftComponentService.flagForCardUpdate(entity);
-    }
   }
 
   static transformEventData(event) {
