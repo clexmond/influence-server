@@ -1,6 +1,5 @@
-const { backOff } = require('exponential-backoff');
 const { defaults } = require('lodash');
-const logger = require('../../logger');
+const RpcBackoff = require('@common/lib/RpcBackoff');
 
 class DefaultStarknetProvider {
   get defaultBackoffOptions() {
@@ -17,17 +16,11 @@ class DefaultStarknetProvider {
   }
 
   _callWithBackoff(fn, fnName) {
-    return backOff(fn, {
+    return RpcBackoff.call(fn, {
       delayFirstAttempt: true,
-      jitter: 'full',
+      label: fnName,
       numOfAttempts: this._backoffOptions.numOfAttempts,
-      startingDelay: this._backoffOptions.startingDelay,
-      retry(error, attemptNumber) {
-        logger.warn(`${fnName}, retry: ${attemptNumber}`);
-        logger.warn(`${fnName}, error: ${error.message || error}`);
-        logger.inspect(error, 'debug');
-        return true;
-      }
+      startingDelay: this._backoffOptions.startingDelay
     });
   }
 }

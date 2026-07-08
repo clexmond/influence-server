@@ -1,7 +1,7 @@
 const { expect } = require('chai');
 const sinon = require('sinon');
-const web3 = require('@common/lib/web3');
 const { EthereumBlockCache } = require('@common/lib/cache');
+const EthereumRpc = require('@common/lib/ethereum/Rpc');
 const { ActivityService, EthereumEventService } = require('@common/services');
 const EthereumAuditor = require('@common/lib/events/auditors/ethereum');
 
@@ -22,8 +22,8 @@ describe('EthereumAuditor', function () {
     };
     const auditor = new EthereumAuditor({ retriever, finalityBlocks: 10, batchSize: 10 });
 
-    sandbox.stub(web3.eth, 'getBlockNumber').resolves(25);
-    sandbox.stub(web3.eth, 'getBlock').resolves({ timestamp: 12345 });
+    sandbox.stub(EthereumRpc, 'getBlockNumber').resolves(25);
+    sandbox.stub(EthereumRpc, 'getBlock').resolves({ timestamp: 12345 });
     sandbox.stub(EthereumBlockCache, 'getLastAuditedFinalizedBlock').resolves(11);
     sandbox.stub(EthereumBlockCache, 'setFinalizedBlockNumber').resolves();
     sandbox.stub(EthereumBlockCache, 'setFinalizedBlockTimestamp').resolves();

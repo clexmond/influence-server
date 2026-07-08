@@ -24,14 +24,19 @@
   },
   "Ethereum": {
     "originBlock": "ETHEREUM_ORIGIN_BLOCK",
-    "provider": "ETHEREUM_PROVIDER"
+    "provider": "ETHEREUM_PROVIDER",
+    "rpcBackoff": {
+      "numOfAttempts": "ETHEREUM_RPC_BACKOFF_NUM_OF_ATTEMPTS",
+      "startingDelay": "ETHEREUM_RPC_BACKOFF_STARTING_DELAY"
+    }
   },
   "EventRetriever": {
     "runDelay": "EVENT_RETRIEVER_RUN_DELAY",
     "ethereum": {
       "runDelay": "ETHEREUM_EVENT_RETRIEVER_RUN_DELAY",
       "blockBatchSize": "ETHEREUM_EVENT_RETRIEVER_BLOCK_BATCH_SIZE",
-      "bootstrapLookbackBlocks": "ETHEREUM_EVENT_RETRIEVER_BOOTSTRAP_LOOKBACK_BLOCKS"
+      "bootstrapLookbackBlocks": "ETHEREUM_EVENT_RETRIEVER_BOOTSTRAP_LOOKBACK_BLOCKS",
+      "catchUpDelay": "ETHEREUM_EVENT_RETRIEVER_CATCH_UP_DELAY"
     },
     "starknet": {
       "runDelay": "STARKNET_EVENT_RETRIEVER_RUN_DELAY",
