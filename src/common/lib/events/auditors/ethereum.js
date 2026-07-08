@@ -2,7 +2,7 @@ const appConfig = require('config');
 const logger = require('@common/lib/logger');
 const { EthereumBlockCache } = require('@common/lib/cache');
 const { ActivityService, EthereumEventService } = require('@common/services');
-const web3 = require('@common/lib/web3');
+const EthereumRpc = require('@common/lib/ethereum/Rpc');
 const { EthereumRetriever } = require('../retrievers/ethereum/retriever');
 const BaseAuditor = require('./Base');
 
@@ -41,7 +41,7 @@ class EthereumAuditor extends BaseAuditor {
 
   async cacheFinalizedBlock(headBlock) {
     const finalizedBlock = Math.max(0, headBlock - this.finalityBlocks);
-    const block = await web3.eth.getBlock(finalizedBlock);
+    const block = await EthereumRpc.getBlock(finalizedBlock);
     const timestamp = Number(block?.timestamp || 0);
 
     await EthereumBlockCache.setFinalizedBlockNumber(finalizedBlock);
@@ -78,7 +78,7 @@ class EthereumAuditor extends BaseAuditor {
 
   async auditOnce() {
     const logSlug = 'EthereumAuditor::auditOnce';
-    const headBlock = Number(await web3.eth.getBlockNumber());
+    const headBlock = Number(await EthereumRpc.getBlockNumber());
     if (!Number.isFinite(headBlock)) throw new Error('Ethereum head block unavailable');
 
     const { finalizedBlock, finalizedTimestamp } = await this.cacheFinalizedBlock(headBlock);

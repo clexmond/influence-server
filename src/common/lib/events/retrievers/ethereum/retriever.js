@@ -2,7 +2,7 @@ const appConfig = require('config');
 const { delay } = require('lodash');
 const { Timer } = require('timer-node');
 const { EthereumBlockCache } = require('@common/lib/cache');
-const web3 = require('@common/lib/web3');
+const EthereumRpc = require('@common/lib/ethereum/Rpc');
 const EthereumEventService = require('../../../../services/Event/Ethereum');
 const EthereumEventsConfig = require('./config');
 const logger = require('../../../logger');
@@ -10,8 +10,18 @@ const logger = require('../../../logger');
 const ETH_ORIGIN_BLOCK = appConfig.get('Ethereum.originBlock');
 const DEFAULT_BLOCK_BATCH_SIZE = 1000;
 const DEFAULT_BOOTSTRAP_LOOKBACK_BLOCKS = 10000;
+const DEFAULT_CATCH_UP_DELAY = 1500;
 
 class EthereumRetriever {
+  getCatchUpDelay() {
+    const configuredDelay = appConfig.EventRetriever.ethereum?.catchUpDelay;
+    const parsedDelay = Number(configuredDelay);
+    if (configuredDelay !== null && typeof configuredDelay !== 'undefined' && Number.isFinite(parsedDelay)) {
+      return parsedDelay;
+    }
+    return DEFAULT_CATCH_UP_DELAY;
+  }
+
   async getBootstrapLastRetrievedBlock() {
     const originBlock = Number(ETH_ORIGIN_BLOCK);
     const bootstrapLookbackBlocks = Number(
@@ -23,7 +33,7 @@ class EthereumRetriever {
     let recentHeadBlock = Number.NaN;
 
     try {
-      const headBlock = Number(await web3.eth.getBlockNumber());
+      const headBlock = Number(await EthereumRpc.getBlockNumber());
       if (Number.isFinite(headBlock)) {
         recentHeadBlock = Math.max(originBlock - 1, headBlock - bootstrapLookbackBlocks);
       }
@@ -98,7 +108,7 @@ class EthereumRetriever {
 
     if (queryAddresses.length === 0 || topics.length === 0) return [];
 
-    const logs = await web3.eth.getPastLogs({
+    const logs = await EthereumRpc.getPastLogs({
       address: queryAddresses,
       fromBlock,
       toBlock,
@@ -138,7 +148,7 @@ class EthereumRetriever {
       const usesLatestHead = toBlock === 'latest' || typeof toBlock === 'undefined' || toBlock === null;
       const _fromBlock = Number(fromBlock || ETH_ORIGIN_BLOCK);
       const _toBlock = usesLatestHead
-        ? Number(await web3.eth.getBlockNumber())
+        ? Number(await EthereumRpc.getBlockNumber())
         : Number(toBlock);
       if (usesLatestHead) await this.cacheCurrentBlockNumber(_toBlock);
       if (_toBlock < _fromBlock) return null;
@@ -170,7 +180,7 @@ class EthereumRetriever {
       let fromBlock;
       let toBlock;
       try {
-        latestBlockNumber = Number(await web3.eth.getBlockNumber());
+        latestBlockNumber = Number(await EthereumRpc.getBlockNumber());
         if (!latestBlockNumber) throw new Error('getBlockNumber returned empty value');
         await this.cacheCurrentBlockNumber(latestBlockNumber);
         const batchSize = Number(appConfig.EventRetriever.ethereum?.blockBatchSize || DEFAULT_BLOCK_BATCH_SIZE);
@@ -200,12 +210,11 @@ class EthereumRetriever {
       }
 
       if (timer.ms() < _runDelay) {
-        const shortDelay = appConfig.util.getEnv('NODE_ENV') === 'development' ? 1 : 1000;
         const caughtUp = !Number.isFinite(latestBlockNumber)
           || !Number.isFinite(fromBlock)
           || fromBlock > latestBlockNumber
           || (Number.isFinite(toBlock) && toBlock >= latestBlockNumber);
-        const delayMs = caughtUp ? _runDelay - timer.ms() : shortDelay;
+        const delayMs = caughtUp ? _runDelay - timer.ms() : this.getCatchUpDelay();
 
         logger.info(`${logSlug}, run delay not met, delaying for [${delayMs}ms]...`);
         await new Promise((resolve) => {
