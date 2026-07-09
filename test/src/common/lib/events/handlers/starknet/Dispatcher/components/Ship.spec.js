@@ -1,17 +1,15 @@
 const { expect } = require('chai');
 const mongoose = require('mongoose');
-const { ElasticSearchService, NftComponentService } = require('@common/services');
+const { ElasticSearchService } = require('@common/services');
 const Handler = require('@common/lib/events/handlers/starknet/Dispatcher/components/Ship');
 
 describe('ComponentUpdated: Ship Handler', function () {
   let event;
   const stubs = {
-    flagForCardUpdate: null,
     queueEntityForIndexing: null
   };
 
   before(function () {
-    stubs.flagForCardUpdate = this._sandbox.stub(NftComponentService, 'flagForCardUpdate').resolves();
     stubs.queueEntityForIndexing = this._sandbox.stub(ElasticSearchService, 'queueEntityForIndexing').resolves();
     event = mongoose.model('Starknet')({
       event: 'ComponentUpdated_Ship',
@@ -55,11 +53,6 @@ describe('ComponentUpdated: Ship Handler', function () {
       await (new Handler(event)).processEvent();
       const docs = await mongoose.model('ShipComponent').find().lean();
       expect(docs).to.have.lengthOf(1);
-    });
-
-    it('should flag the NftComponent for card update', async function () {
-      await (new Handler(event)).processEvent();
-      expect(stubs.flagForCardUpdate.calledOnce).to.equal(true);
     });
 
     it('queue the entity for indexing', async function () {

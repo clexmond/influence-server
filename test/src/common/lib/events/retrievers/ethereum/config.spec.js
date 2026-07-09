@@ -48,4 +48,30 @@ describe('Ethereum Event Config', function () {
       expect(handler).to.be.an('function');
     });
   });
+
+  describe('matchesEventFilter', function () {
+    it('should match ethereum address filters regardless of checksum casing', function () {
+      const matches = EthereumEventConfig.matchesEventFilter({
+        returnValues: {
+          toAddress: '0xe4A4a70b9793220746e414ECf54CF9fbbF16ebFb'
+        }
+      }, {
+        toAddress: ['0xe4a4a70b9793220746e414ecf54cf9fbbf16ebfb']
+      });
+
+      expect(matches).to.equal(true);
+    });
+
+    it('should not normalize non-address filter values', function () {
+      const matches = EthereumEventConfig.matchesEventFilter({
+        returnValues: {
+          fromAddress: '0x30058f19ed447208015f6430f0102e8ab82d6c291566d7e73fe8e613c3d2ed'
+        }
+      }, {
+        fromAddress: ['0x0030058f19ed447208015f6430f0102e8ab82d6c291566d7e73fe8e613c3d2ed']
+      });
+
+      expect(matches).to.equal(false);
+    });
+  });
 });

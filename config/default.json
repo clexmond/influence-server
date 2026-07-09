@@ -7,9 +7,6 @@
   "Argent": {
     "relayerPath": "/v1/relayer/execute"
   },
-  "Aws": {
-    "region": "us-east-2"
-  },
   "Contracts": {
     "starknet": {
       "udc": "0x041a78e741e5af2fec34b695679bc6891742439f7afb8484ecd7766661ad02bf"
@@ -24,7 +21,11 @@
     }
   },
   "Ethereum": {
-    "originBlock": 1
+    "originBlock": 1,
+    "rpcBackoff": {
+      "numOfAttempts": 6,
+      "startingDelay": 1500
+    }
   },
   "Events": {
     "handlers": {
@@ -71,7 +72,8 @@
     "ethereum": {
       "runDelay": 60000,
       "blockBatchSize": 10,
-      "bootstrapLookbackBlocks": 10000
+      "bootstrapLookbackBlocks": 10000,
+      "catchUpDelay": 1500
     },
     "starknet": {
       "runDelay": 20000,
@@ -104,9 +106,6 @@
         "name": "Influence Notifications"
       }
     }
-  },
-  "NftCardBuilder": {
-    "runDelay": 5000
   },
   "Redis": {
     "skipTlsCheck":0

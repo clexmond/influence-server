@@ -8,6 +8,16 @@ describe('ShipService', function () {
     return this.utils.resetCollections(['LocationComponent']);
   });
 
+  describe('getStaticCardFilename', function () {
+    it('should select a ship card by type and variant', function () {
+      const filename = ShipService.getStaticCardFilename({
+        Ship: { shipType: 2, variant: 4 }
+      });
+
+      expect(filename).to.equal('ship-light-transport-aureate-pioneer.png');
+    });
+  });
+
   describe('getCountForAsteroid', function () {
     it('should return the Ship count for the specified asteroid entity', async function () {
       await mongoose.model('LocationComponent').create([

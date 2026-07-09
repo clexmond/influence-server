@@ -14,20 +14,6 @@
     "uri": "http://null.localhost",
     "apiKey": "ARGENT_API_KEY"
   },
-  "Aws": {
-    "accessKey": "AWS_ACCESS_KEY",
-    "secretAccessKey": "AWS_SECRET_ACCESS_KEY",
-    "cloudfront": {
-      "distrbutionId": "AWS_CLOUDFRONT_DISRIBUTION_ID",
-      "imageHandlerDistributionId": "AWS_CLOUDFRONT_IMAGE_HANDLER_DISRIBUTION_ID"
-    }
-  },
-  "Cdn": {
-    "awsBucket": "",
-    "cloudfrontUrl": "https://www.bar.com",
-    "enabled": 1,
-    "imageHandlerUrl": "https://www.foo.com"
-  },
   "Contracts": {
     "ethereum": {
       "arvadCrewSale": "0xe24021388601dBd07Dbd99e1f6D8199061c10892",

@@ -2,18 +2,6 @@
   "Argent": {
     "uri": "https://api.hydrogen.argent47.net"
   },
-  "Aws": {
-    "cloudfront": {
-      "distrbutionId": "AWS_CLOUDFRONT_DISRIBUTION_ID",
-      "imageHandlerDistributionId": "AWS_CLOUDFRONT_IMAGE_HANDLER_DISRIBUTION_ID"
-    }
-  },
-  "Cdn": {
-    "awsBucket": "influence",
-    "cloudfrontUrl": "",
-    "enabled": 1,
-    "imageHandlerUrl": ""
-  },
   "Contracts": {
     "ethereum": {
       "arvadCrewSale": "0x4E928EB49d83E84dB40cFDb226ca6ff1B2bEA767",

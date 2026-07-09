@@ -1,12 +1,11 @@
 const { expect } = require('chai');
 const mongoose = require('mongoose');
-const { ElasticSearchService, NftComponentService } = require('@common/services');
+const { ElasticSearchService } = require('@common/services');
 const Handler = require('@common/lib/events/handlers/starknet/Dispatcher/components/Name');
 
 describe('ComponentUpdated: Name Handler', function () {
   let event;
   const stubs = {
-    flagForCardUpdate: null,
     queueEntityForIndexing: null,
     queueRelatedEntitiesForIndexing: null
   };
@@ -29,7 +28,6 @@ describe('ComponentUpdated: Name Handler', function () {
       }
     });
 
-    stubs.flagForCardUpdate = this._sandbox.stub(NftComponentService, 'flagForCardUpdate').resolves();
     stubs.queueEntityForIndexing = this._sandbox.stub(ElasticSearchService, 'queueEntityForIndexing').resolves();
     stubs.queueRelatedEntitiesForIndexing = this._sandbox.stub(ElasticSearchService, 'queueRelatedEntitiesForIndexing')
       .resolves();
@@ -44,11 +42,6 @@ describe('ComponentUpdated: Name Handler', function () {
       await (new Handler(event)).processEvent();
       const docs = await mongoose.model('NameComponent').find().lean();
       expect(docs).to.have.lengthOf(1);
-    });
-
-    it('should flag the NftComponent for card update', async function () {
-      await (new Handler(event)).processEvent();
-      expect(stubs.flagForCardUpdate.calledOnce).to.equal(true);
     });
 
     it('queue the entity for indexing', async function () {

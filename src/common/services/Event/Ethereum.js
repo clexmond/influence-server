@@ -1,9 +1,9 @@
 const memoize = require('micro-memoize');
 const mongoose = require('mongoose');
-const web3 = require('@common/lib/web3');
+const EthereumRpc = require('@common/lib/ethereum/Rpc');
 
 const getBlock = async function (blockNumber) {
-  const block = await web3.eth.getBlock(blockNumber);
+  const block = await EthereumRpc.getBlock(blockNumber);
   if (block && block.timestamp) return block;
   throw new Error('web3.eth.getBlock returned null');
 };

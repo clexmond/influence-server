@@ -1,4 +1,4 @@
-const { ComponentService, ElasticSearchService, NftComponentService } = require('@common/services');
+const { ComponentService, ElasticSearchService } = require('@common/services');
 const BaseHandler = require('../../Handler');
 
 class Handler extends BaseHandler {
@@ -13,7 +13,7 @@ class Handler extends BaseHandler {
   async processEvent() {
     const { returnValues: { entity } } = this.eventDoc;
 
-    const { doc: newDoc, oldDoc, updated } = await ComponentService.updateOrCreateFromEvent({
+    const { updated } = await ComponentService.updateOrCreateFromEvent({
       component: 'Ship',
       event: this.eventDoc,
       data: { ...this.eventDoc.returnValues },
@@ -22,11 +22,6 @@ class Handler extends BaseHandler {
 
     if (!updated) return;
     await ElasticSearchService.queueEntityForIndexing(entity);
-
-    // If the ship type or variant has changed, flag the card for update
-    if (!oldDoc || newDoc.shipType !== oldDoc.shipType || newDoc.variant !== oldDoc.variant) {
-      await NftComponentService.flagForCardUpdate(entity, true);
-    }
   }
 
   static transformEventData(event) {

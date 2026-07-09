@@ -1,41 +1,17 @@
+const fs = require('fs/promises');
 const mongoose = require('mongoose');
+const path = require('path');
 const { get, isNil, isNumber } = require('lodash');
-const Logger = require('@common/lib/logger');
 const { Address } = require('@influenceth/sdk');
 const Entity = require('@common/lib/Entity');
-const CrewCardGenerator = require('../lib/cardGenerators/crew');
-const EntityService = require('./Entity');
+
+const STATIC_CARD_PATH = path.resolve(__dirname, '../assets/images/crews/cards');
 
 class CrewService {
-  // Generates the NFT metadata card image
-  static async generateCard({ crewmateDoc, crewDoc, crewEntity, crewmateEntity, ...props }) {
-    let _crewEntity = crewDoc;
-    let _crewmateEntity = crewmateDoc;
-
-    if (crewEntity) {
-      _crewEntity = await EntityService.getEntity({
-        id: crewEntity.id, label: Entity.IDS.CREW, components: ['Crew', 'Name'], format: true
-      });
-    }
-    if (crewmateEntity) {
-      _crewmateEntity = await EntityService.getEntity({
-        id: crewmateEntity.id, label: Entity.IDS.CREWMATE, components: ['Crewmate', 'Name'], format: true
-      });
-    }
-
-    // attempt to find the crewmate's captain
-    if (!_crewmateEntity) {
-      const captainId = get(_crewEntity, 'Crew.roster[0]');
-      if (!captainId) {
-        Logger.warn(`No captain found for crew with id ${_crewEntity.id}`);
-      } else {
-        _crewmateEntity = await EntityService.getEntity({
-          id: captainId, label: Entity.IDS.CREWMATE, components: ['Crewmate', 'Name'], format: true
-        });
-      }
-    }
-
-    return CrewCardGenerator.generateCard({ crewmate: _crewmateEntity, crew: _crewEntity, ...props });
+  // Returns the NFT metadata card image.
+  static async getCard({ fileType }) {
+    if (fileType !== 'png') throw new Error('Crew cards are only available as png');
+    return fs.readFile(path.join(STATIC_CARD_PATH, 'crew.png'));
   }
 
   static async findStation(crew, { lean = true } = {}) {

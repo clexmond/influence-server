@@ -1,5 +1,7 @@
+/* eslint-disable no-bitwise */
+
 const mongoose = require('mongoose');
-const { isArray, range, without } = require('lodash');
+const { range, without } = require('lodash');
 const { eachLimit } = require('async');
 const { Timer } = require('timer-node');
 const { Asteroid, Building } = require('@influenceth/sdk');
@@ -9,17 +11,78 @@ const { LotDataCache } = require('@common/lib/cache');
 const Logger = require('@common/lib/logger');
 const LotService = require('../Lot');
 
-const LotAttribute = {
-  HAS_SAMPLES:   { value: "hasSamples"  , mask: 0b0000000000000001, shift: 0, compute: async (lotEntity) => { return 0; } },  // Chvx -> found on client side but not here?
-  HAS_CREW:      { value: "hasCrew"     , mask: 0b0000000000000010, shift: 1, compute: async (lotEntity) => { return await PackedLotDataService._locationWithCrew(lotEntity); } },
-  LEASE_STATUS:  { value: "leaseStatus" , mask: 0b0000000000001100, shift: 2, compute: async (lotEntity) => { return await LotService.getLeaseStatus(lotEntity); } },
-  BUILDING_TYPE: { value: "buildingType", mask: 0b0000001111110000, shift: 4, compute: async (lotEntity) => { return await PackedLotDataService._buildingTypeOrStatus(lotEntity); } },
-}
+const LotSpecialType = { EMPTY: 0, CONTRUCTION_SITE: 62, LANDED_SHIP: 63 };
 
-const LotSpecialType = { EMPTY: 0, CONTRUCTION_SITE: 62, LANDED_SHIP: 63}
+const getBuildingTypeOrStatus = async (lotEntity) => {
+  const [buildingLocationDoc, shipLocationDoc] = await Promise.all([
+    mongoose.model('LocationComponent').findOne({
+      'location.uuid': lotEntity.uuid,
+      'entity.label': Entity.IDS.BUILDING
+    }).sort({ 'entity.id': -1 }).populate(['virtuals.building']),
+    mongoose.model('LocationComponent').findOne({
+      'location.uuid': lotEntity.uuid,
+      'entity.label': Entity.IDS.SHIP
+    }).sort({ 'entity.id': -1 })
+  ]);
+
+  if (!buildingLocationDoc && !shipLocationDoc) return 0;
+
+  if (buildingLocationDoc?.virtuals?.building) {
+    const { virtuals: { building } } = buildingLocationDoc.toJSON();
+    // special case, building is under construction
+    const { PLANNED, UNDER_CONSTRUCTION } = Building.CONSTRUCTION_STATUSES;
+    if ([PLANNED, UNDER_CONSTRUCTION].includes(building.status)) return LotSpecialType.CONTRUCTION_SITE;
+
+    // return building type if building found on lot
+    if (building.status && building.buildingType > 0 && Building.TYPES[building.buildingType]) {
+      return building.buildingType;
+    }
+  }
+
+  // special case, landed ship
+  if (shipLocationDoc) return LotSpecialType.LANDED_SHIP;
+
+  return 0;
+};
+
+const getLocationWithCrew = async (lotEntity) => {
+  const exists = await mongoose.model('LocationComponent').exists({
+    'locations.uuid': lotEntity.uuid,
+    'entity.label': Entity.IDS.CREW
+  });
+
+  return exists ? 1 : 0;
+};
+
+const LotAttribute = {
+  HAS_SAMPLES: {
+    value: 'hasSamples',
+    mask: 0b0000000000000001,
+    shift: 0,
+    compute: async () => 0
+  },
+  HAS_CREW: {
+    value: 'hasCrew',
+    mask: 0b0000000000000010,
+    shift: 1,
+    compute: getLocationWithCrew
+  },
+  LEASE_STATUS: {
+    value: 'leaseStatus',
+    mask: 0b0000000000001100,
+    shift: 2,
+    compute: async (lotEntity) => LotService.getLeaseStatus(lotEntity)
+  },
+  BUILDING_TYPE: {
+    value: 'buildingType',
+    mask: 0b0000001111110000,
+    shift: 4,
+    compute: getBuildingTypeOrStatus
+  }
+};
 
 class PackedLotDataService {
-  static PACKED_WIDTH = 10;  // align with client-side src/lib/api.js getAsteroidLotData()
+  static PACKED_WIDTH = 10; // align with client-side src/lib/api.js getAsteroidLotData()
 
   static hasAgreement(data) {
     return ((data & LotAttribute.LEASE_STATUS.mask) >>> LotAttribute.LEASE_STATUS.shift) === 2;
@@ -62,8 +125,8 @@ class PackedLotDataService {
 
     const computedBits = await Promise.all(
       attributes.map(async (attribute) => {
-          const value = await attribute.compute.call(this, lotEntity);
-          return (value << attribute.shift) & attribute.mask;
+        const value = await attribute.compute.call(this, lotEntity);
+        return (value << attribute.shift) & attribute.mask;
       })
     );
 
@@ -138,7 +201,7 @@ class PackedLotDataService {
     const lotCount = Asteroid.getSurfaceArea(asteroidEntity.id);
 
     const packed = new PackedData({ size: lotCount, packedWidth: this.PACKED_WIDTH });
-    
+
     const lotIndices = range(1, lotCount + 1);
     for (const lotIndex of lotIndices) {
       packed.set(lotIndex - 1, 1 << LotAttribute.LEASE_STATUS.shift);
@@ -185,7 +248,6 @@ class PackedLotDataService {
   }
 
   static async updateLotAttribute(lot, lotAttribute, forcedValue) {
-	
     const lotEntity = Entity.toEntity(lot);
     if (!lotEntity.isLot()) throw new Error('Entity not a lot');
 
@@ -201,8 +263,8 @@ class PackedLotDataService {
     const packedIndex = lotIndex - 1;
 
     // get the current packed data for the lot
-    const lotData = packedData.get(packedIndex)
-	
+    const lotData = packedData.get(packedIndex);
+
     // set the correct mask, shift, and value based on attribute; use forceValue if provided
     const { mask, shift, compute } = lotAttribute;
     const rawValue = forcedValue !== undefined
@@ -210,13 +272,13 @@ class PackedLotDataService {
       : await compute.call(this, lotEntity);
 
     const shiftedValue = (rawValue << shift) & mask;
-    
+
     // clear then set the bits
     const updatedLotData = (lotData & ~mask) | shiftedValue;
 
     // no need for update if the data is the same
     if (lotData === updatedLotData) return packedData;
-    
+
     packedData.set(packedIndex, updatedLotData);
 
     await this._cacheSet(asteroidEntity, packedData);
@@ -225,19 +287,19 @@ class PackedLotDataService {
   }
 
   static async updateLotCrewStatus(lot) {
-    return await this.updateLotAttribute(lot, LotAttribute.HAS_CREW);
+    return this.updateLotAttribute(lot, LotAttribute.HAS_CREW);
   }
 
   static async updateBuildingTypeForLot(lot) {
-    return await this.updateLotAttribute(lot, LotAttribute.BUILDING_TYPE);
+    return this.updateLotAttribute(lot, LotAttribute.BUILDING_TYPE);
   }
 
   static async updateLotLeaseStatus(lot) {
-    return await this.updateLotAttribute(lot, LotAttribute.LEASE_STATUS);
+    return this.updateLotAttribute(lot, LotAttribute.LEASE_STATUS);
   }
 
   static async updateLotToLeased(lot) {
-    return await this.updateLotAttribute(lot, LotAttribute.LEASE_STATUS, 2);
+    return this.updateLotAttribute(lot, LotAttribute.LEASE_STATUS, 2);
   }
 
   /**
@@ -339,7 +401,7 @@ class PackedLotDataService {
       // if has a current agreement but force is not true, skip
       if (!this.hasAgreement(lotData) || (this.hasAgreement(lotData) && clearAgreements)) {
         // update the lease status to 0 (= clear bits)
-        const updatedLotData = lotData & ~ LotAttribute.LEASE_STATUS.mask;
+        const updatedLotData = lotData & ~LotAttribute.LEASE_STATUS.mask;
 
         // update the packed data object
         packedData.set(packedIndex, updatedLotData);
@@ -355,45 +417,11 @@ class PackedLotDataService {
   /* Private */
 
   static async _buildingTypeOrStatus(lotEntity) {
-
-    const [buildingLocationDoc, shipLocationDoc] = await Promise.all([
-      mongoose.model('LocationComponent').findOne({
-        'location.uuid': lotEntity.uuid,
-        'entity.label': Entity.IDS.BUILDING
-      }).sort({ 'entity.id': -1 }).populate(['virtuals.building']),
-      mongoose.model('LocationComponent').findOne({
-        'location.uuid': lotEntity.uuid,
-        'entity.label': Entity.IDS.SHIP
-      }).sort({ 'entity.id': -1 })
-    ]);
-
-    if (!buildingLocationDoc && !shipLocationDoc) return 0;
-
-    if (buildingLocationDoc?.virtuals?.building) {
-      const { virtuals: { building } } = buildingLocationDoc.toJSON();
-      // special case, building is under construction
-      const { PLANNED, UNDER_CONSTRUCTION } = Building.CONSTRUCTION_STATUSES;
-      if ([PLANNED, UNDER_CONSTRUCTION].includes(building.status)) return LotSpecialType.CONTRUCTION_SITE;
-
-      // return building type if building found on lot
-      if (building.status && building.buildingType > 0 && Building.TYPES[building.buildingType]) {
-        return building.buildingType;
-      }
-    }
-
-    // special case, landed ship
-    if (shipLocationDoc) return LotSpecialType.LANDED_SHIP;
-
-    return 0;
+    return getBuildingTypeOrStatus(lotEntity);
   }
 
   static async _locationWithCrew(lotEntity) {
-    const exists = await mongoose.model('LocationComponent').exists({
-          'locations.uuid': lotEntity.uuid,
-          'entity.label': Entity.IDS.CREW
-        });
-
-    return exists ? 1 : 0;
+    return getLocationWithCrew(lotEntity);
   }
 
   /**

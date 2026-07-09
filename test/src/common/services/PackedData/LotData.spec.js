@@ -1,3 +1,5 @@
+/* eslint-disable no-bitwise */
+
 const { expect } = require('chai');
 const moment = require('moment');
 const mongoose = require('mongoose');
@@ -70,7 +72,7 @@ describe('Packed LotData Service', function () {
 
     /*
     Packed representation of what we just built:
-    
+
     Individual lots, 10-bits packing:
     Lot1: 0b000001_10_0_0
     Lot2: 0b000010_00_0_0
@@ -87,9 +89,10 @@ describe('Packed LotData Service', function () {
     0b00_000000000000000000000000000000   // lots 13_padding
 
     Warning for passing expected data to test functions:
-    The packed data structure returns signed integer values, but the above binary would be interpreted as unsigned by default.
+    The packed data structure returns signed integer values, but the above binary would be interpreted as
+    unsigned by default.
     This causes an issue when the first bit is a 1 where we test against the 2-complement of the actual value.
-    To force signed parsing and solve this issue, we do 0b11...00 | 0 
+    To force signed parsing and solve this issue, we do 0b11...00 | 0
     */
 
     // clear the cache
@@ -111,8 +114,8 @@ describe('Packed LotData Service', function () {
     it('should build the packed data for all lots on an asteroid and update cache', async function () {
       const { packedData, packedWidth } = await PackedLotDataService.build(Entity.Asteroid(250_000));
       expect(packedData).to.eql([
-        0b0000011000_0000100000_1111100000_11|0,
-        0b11100000_1111110000_0000000000_0000|0,
+        0b0000011000_0000100000_1111100000_11 | 0,
+        0b11100000_1111110000_0000000000_0000 | 0,
         0,
         0,
         0
@@ -124,8 +127,8 @@ describe('Packed LotData Service', function () {
     it('should build for the asteroid but NOT update cache (save: false)', async function () {
       const { packedData, packedWidth } = await PackedLotDataService.build(Entity.Asteroid(250_000), false);
       expect(packedData).to.eql([
-        0b0000011000_0000100000_1111100000_11|0,
-        0b11100000_1111110000_0000000000_0000|0,
+        0b0000011000_0000100000_1111100000_11 | 0,
+        0b11100000_1111110000_0000000000_0000 | 0,
         0,
         0,
         0
@@ -162,11 +165,11 @@ describe('Packed LotData Service', function () {
       await PackedLotDataService.initForLeasableAsteroid(asteroid);
       const result = await PackedLotDataService.get(asteroid);
       expect(result.packedData).to.eql([
-        0b0000000100_0000000100_0000000100_00|0,
-        0b00000100_0000000100_0000000100_0000|0,
-        0b000100_0000000100_0000000100_000000|0,
-        0b0100_0000000100_0000000100_00000001|0,
-        0b00_000000000000000000000000000000|0
+        0b0000000100_0000000100_0000000100_00 | 0,
+        0b00000100_0000000100_0000000100_0000 | 0,
+        0b000100_0000000100_0000000100_000000 | 0,
+        0b0100_0000000100_0000000100_00000001 | 0,
+        0b00_000000000000000000000000000000 | 0
       ]);
     });
   });
@@ -186,8 +189,8 @@ describe('Packed LotData Service', function () {
       const packedData = await PackedLotDataService.get(asteroidEntity);
 
       expect(packedData.packedData).to.deep.eql([
-        0b0000010000_0000100000_1111100000_11|0,
-        0b11100000_1111110000_0000000000_0000|0,
+        0b0000010000_0000100000_1111100000_11 | 0,
+        0b11100000_1111110000_0000000000_0000 | 0,
         0,
         0,
         0
@@ -203,11 +206,11 @@ describe('Packed LotData Service', function () {
 
       const packedData = await PackedLotDataService.updateLotsToLeaseable({ asteroidEntity });
       expect(packedData.packedData).to.deep.eql([
-        0b0000000100_0000000100_0000000100_00|0,
-        0b00000100_0000000100_0000000100_0000|0,
-        0b000100_0000000100_0000000100_000000|0,
-        0b0100_0000000100_0000000100_00000001|0,
-        0b00_000000000000000000000000000000|0
+        0b0000000100_0000000100_0000000100_00 | 0,
+        0b00000100_0000000100_0000000100_0000 | 0,
+        0b000100_0000000100_0000000100_000000 | 0,
+        0b0100_0000000100_0000000100_00000001 | 0,
+        0b00_000000000000000000000000000000 | 0
       ]);
     });
   });
@@ -218,8 +221,8 @@ describe('Packed LotData Service', function () {
       await PackedLotDataService.build(asteroidEntity);
       const packedData = await PackedLotDataService.updateLotsToNonLeaseable({ asteroidEntity, clearAgreements: true });
       expect(packedData.packedData).to.deep.eql([
-        0b0000010000_0000100000_1111100000_11|0,
-        0b11100000_1111110000_0000000000_0000|0,
+        0b0000010000_0000100000_1111100000_11 | 0,
+        0b11100000_1111110000_0000000000_0000 | 0,
         0,
         0,
         0
@@ -233,8 +236,8 @@ describe('Packed LotData Service', function () {
         asteroidEntity, clearAgreements: false
       });
       expect(packedData.packedData).to.deep.eql([
-        0b0000011000_0000100000_1111100000_11|0,
-        0b11100000_1111110000_0000000000_0000|0,
+        0b0000011000_0000100000_1111100000_11 | 0,
+        0b11100000_1111110000_0000000000_0000 | 0,
         0,
         0,
         0
@@ -261,8 +264,8 @@ describe('Packed LotData Service', function () {
       await PackedLotDataService.build(asteroidEntity);
       const packedData = await PackedLotDataService.get(asteroidEntity);
       expect(packedData.packedData).to.deep.equal([
-        0b0000011000_0000100000_1111100000_11|0,
-        0b11100000_1111110000_0000000000_0000|0,
+        0b0000011000_0000100000_1111100000_11 | 0,
+        0b11100000_1111110000_0000000000_0000 | 0,
         0,
         0,
         0
@@ -287,7 +290,8 @@ describe('Packed LotData Service', function () {
   describe('update', function () {
     it('should update the data for a specific asteroid and lot', async function () {
       // Chvx > why is this test not building the data first like the others?
-      // Anyway, it means we should expect the rest of the lots to be empty in our packed data because we are not preloading them.
+      // Anyway, it means we should expect the rest of the lots to be empty in our packed data because we are
+      // not preloading them.
 
       // now update the building data for building 1
       await mongoose.model('BuildingComponent').updateOne(
@@ -296,7 +300,7 @@ describe('Packed LotData Service', function () {
       );
       const result = await PackedLotDataService.update(Entity.lotFromIndex(250_000, 1));
       expect(result.packedData).to.eql([
-        0b0000101000_0000000000_0000000000_00|0,
+        0b0000101000_0000000000_0000000000_00 | 0,
         0,
         0,
         0,
