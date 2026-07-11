@@ -87,7 +87,7 @@
   },
   "Redis": {
     "uri": "REDIS_URL",
-    "skipTlsCheck": "REDIS_SKIP_TLS_CHECK"
+    "disableTls": "REDIS_DISABLE_TLS"
   },
   "SendGrid": {
     "apiKey": "SENDGRID_API_KEY",

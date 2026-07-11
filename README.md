@@ -78,7 +78,7 @@ Notes:
 
 ### Run an official prerelease or production image
 1. Download `compose.yaml` and `compose.prerelease.yaml` or `compose.prod.yaml`
-2. Initialize your `.env` file - `NODE_ENV=production`; *if running against a local redis instance, set `REDIS_SKIP_TLS_CHECK=1`*
+2. Initialize your `.env` file - `NODE_ENV=production`; *if running against a local redis instance, set `REDIS_DISABLE_TLS=1`*
 3. Start the containers (sample commands in `compose.prerelease.yaml` and `compose.prod.yaml`)
 
 ### Influence-server services
