@@ -86,7 +86,8 @@
     "chain": "ELEMENT_CHAIN"
   },
   "Redis": {
-    "uri": "REDIS_URL"
+    "uri": "REDIS_URL",
+    "disableTls": "REDIS_DISABLE_TLS"
   },
   "SendGrid": {
     "apiKey": "SENDGRID_API_KEY",

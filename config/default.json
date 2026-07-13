@@ -107,6 +107,9 @@
       }
     }
   },
+  "Redis": {
+    "disableTls":0
+  },
   "Starknet": {
     "originBlock": 1
   }
