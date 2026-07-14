@@ -9,6 +9,8 @@
 
 x-image: &image
   image: ghcr.io/adaliafoundation/influence-server:prerelease
+  environment:
+    NODE_ENV: prerelease
 
 services:
   influence-server:
