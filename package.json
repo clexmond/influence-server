@@ -35,7 +35,7 @@
   "dependencies": {
     "@elastic/elasticsearch": "8.9.0",
     "@influenceth/astro": "^0.2.5",
-    "@influenceth/sdk": "^2.4.3",
+    "@influenceth/sdk": "^2.4.4",
     "@keyv/mongo": "^2.1.8",
     "@keyv/redis": "2.5.7",
     "@koa/cors": "5.0.0",
