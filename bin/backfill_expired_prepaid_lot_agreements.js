@@ -8,10 +8,13 @@ const Entity = require('@common/lib/Entity');
 const { ComponentService, ElasticSearchService, LotService } = require('@common/services');
 
 const logger = console;
+const PROGRESS_INTERVAL = 10000;
 
-const done = function (error) {
+const done = async function (error) {
   if (error) logger.error(error);
-  process.exit(error ? 1 : 0);
+
+  await mongoose.connection.close();
+  process.exitCode = error ? 1 : 0;
 };
 
 const args = yargs(hideBin(process.argv))
@@ -43,6 +46,11 @@ const shouldRestore = function ({ endTime, permission, startTime }) {
     && endTime <= Math.floor(Date.now() / 1000);
 };
 
+const memoryUsage = function () {
+  const { heapUsed, rss } = process.memoryUsage();
+  return `heap=${Math.round(heapUsed / 1024 / 1024)}MB rss=${Math.round(rss / 1024 / 1024)}MB`;
+};
+
 const main = async function ({ days, dryRun }) {
   const now = Math.floor(Date.now() / 1000);
   const endTimeFilter = { $lte: now };
@@ -52,21 +60,39 @@ const main = async function ({ days, dryRun }) {
   const touchedLotUuids = new Set();
   let matched = 0;
   let restored = 0;
+  let scanned = 0;
+  let checked = 0;
+  let finalized = 0;
 
   const cursor = mongoose.model('Event')
     .find({
       event: 'ComponentUpdated_PrepaidAgreement',
       'returnValues.permission': Permission.IDS.USE_LOT
     })
+    .select('_id __t timestamp blockNumber transactionIndex logIndex returnValues')
     .sort({ blockNumber: 1, transactionIndex: 1, logIndex: 1 })
+    .lean()
     .cursor();
 
   for (let eventDoc = await cursor.next(); eventDoc != null; eventDoc = await cursor.next()) {
+    scanned += 1;
+    if (scanned % PROGRESS_INTERVAL === 0) {
+      logger.info(`Scanned ComponentUpdated_PrepaidAgreement events: ${scanned} (${memoryUsage()})`);
+    }
+
     const key = agreementKey(eventDoc.returnValues);
     if (key) latestByAgreement.set(key, eventDoc);
   }
 
+  logger.info(`Finished scanning ComponentUpdated_PrepaidAgreement events: ${scanned} (${memoryUsage()})`);
+  logger.info(`Latest USE_LOT prepaid agreement states found: ${latestByAgreement.size}`);
+
   for (const eventDoc of latestByAgreement.values()) {
+    checked += 1;
+    if (checked % PROGRESS_INTERVAL === 0) {
+      logger.info(`Checked latest agreement states: ${checked}`);
+    }
+
     const data = eventDoc.returnValues;
     if (!shouldRestore(data)) continue;
     if (data.endTime > endTimeFilter.$lte) continue;
@@ -91,6 +117,11 @@ const main = async function ({ days, dryRun }) {
 
   if (!dryRun) {
     for (const lotUuid of touchedLotUuids) {
+      finalized += 1;
+      if (finalized % PROGRESS_INTERVAL === 0) {
+        logger.info(`Cleaned and queued touched lots: ${finalized}`);
+      }
+
       const lotEntity = Entity.fromUuid(lotUuid);
       await LotService.cleanupSupersededExpiredPrepaidLeases(lotEntity);
       await ElasticSearchService.queueEntityForIndexing(lotEntity);
